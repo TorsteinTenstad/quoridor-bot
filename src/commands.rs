@@ -1,9 +1,14 @@
+use std::{collections::HashMap};
+
+use clap::Parser;
+
 use crate::{
     bot::{best_move_alpha_beta, best_move_alpha_beta_iterative_deepening},
     data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
     game_logic::{execute_move_unchecked, is_move_legal},
+    nn_bot::{self, QuoridorNet}
 };
-use clap::Parser;
+
 use std::{fmt::Display, time::Duration};
 
 #[derive(clap_derive::Subcommand, Debug)]
@@ -22,6 +27,10 @@ pub enum AuxCommand {
 
         #[arg(short, long, group = "time_control")]
         seconds: Option<u64>,
+    },
+    PlayNNMove {
+        #[arg(default_value_t = 0.0)]
+        temperature: f32,
     },
     Undo {
         #[arg(default_value_t = 1)]
@@ -59,12 +68,14 @@ pub enum Command {
 
 pub struct Session {
     pub game_states: Vec<Game>,
+    pub neural_networks: HashMap<Player, QuoridorNet>,
     pub moves: Vec<PlayerMove>,
 }
 impl Session {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(neural_networks: HashMap<Player, QuoridorNet>) -> Self {
         Self {
             game_states: vec![Game::new()],
+            neural_networks: neural_networks,
             moves: Vec::new(),
         }
     }
@@ -81,7 +92,7 @@ pub fn execute_command(session: &mut Session, command: Command) {
             session.moves.push(player_move);
         }
         Command::AuxCommand(aux_command) => match aux_command {
-            AuxCommand::Reset => *session = Session::new(),
+            AuxCommand::Reset => {*session = Session::new(HashMap::new())},
             AuxCommand::BotMove { depth, seconds } => {
                 let bot_move = get_bot_move(
                     current_game_state,
@@ -103,6 +114,15 @@ pub fn execute_command(session: &mut Session, command: Command) {
                 execute_move_unchecked(&mut next_game_state, player, &bot_move.player_move);
                 session.game_states.push(next_game_state);
                 session.moves.push(bot_move.player_move);
+            }
+            AuxCommand::PlayNNMove {temperature} =>
+            {
+                let nn_move = nn_bot::get_move(&current_game_state, session.neural_networks.get(&player).unwrap(), player, temperature);
+                
+                let mut next_game_state = current_game_state.clone();
+                execute_move_unchecked(&mut next_game_state, player, &nn_move);
+                session.game_states.push(next_game_state);
+
             }
             AuxCommand::Undo { moves } => {
                 for _ in 0..moves {
@@ -159,7 +179,7 @@ pub fn execute_command(session: &mut Session, command: Command) {
                     .map(parse_player_move)
                     .collect::<Option<Vec<_>>>()
                 {
-                    *session = Session::new();
+                    *session = Session::new(HashMap::new());
                     for player_move in moves {
                         let mut next_game_state = session.game_states.last().unwrap().clone();
                         let player = next_game_state.player;

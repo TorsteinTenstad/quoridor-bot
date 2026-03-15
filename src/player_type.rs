@@ -4,6 +4,7 @@ use std::fmt::Display;
 pub enum PlayerType {
     Human,
     Bot,
+    NeuralNet
 }
 
 impl Display for PlayerType {
@@ -11,6 +12,7 @@ impl Display for PlayerType {
         match self {
             PlayerType::Human => write!(f, "human"),
             PlayerType::Bot => write!(f, "bot"),
+            PlayerType::NeuralNet => write!(f, "neural network")
         }
     }
 }

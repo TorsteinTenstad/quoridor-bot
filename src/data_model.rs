@@ -105,7 +105,7 @@ impl Display for PlayerMove {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Player {
     #[default]
     White = 0,
