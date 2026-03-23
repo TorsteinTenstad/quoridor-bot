@@ -46,18 +46,19 @@ pub fn heuristic_board_score(game: &Game) -> isize {
         - game.walls_left[Player::White.as_index()]
         - game.walls_left[Player::Black.as_index()];
     let wall_progress = total_walls_played as f32 / TOTAL_WALLS as f32;
-    let wall_value = 0.75 - 0.5 * wall_progress;
-    let (distance_priority, wall_priority) = (1, wall_value);
+    let wall_value = 75.0 - 50.0 * wall_progress;
+    let (distance_priority, wall_priority) = (100, wall_value);
 
     let path_length_between_players = a_star_to_opponent(&game.board, game.player)
         .map(|v| v.len())
         .unwrap_or(usize::MAX);
 
-    let side = 2.0 * game.board.player_position(game.player).y() as f32
+    let side = (game.board.player_position(Player::White).y() as f32
+        + game.board.player_position(Player::Black).y() as f32)
         / (PIECE_GRID_HEIGHT - 1) as f32
         - 1.0;
 
-    let side_component = -side * 20.0 / path_length_between_players as f32;
+    let side_component = -side * 1000.0 / path_length_between_players as f32;
 
     distance_priority * distance_score
         + (wall_priority * wall_score as f32 + side_component) as isize
@@ -72,13 +73,17 @@ pub fn best_move_alpha_beta_iterative_deepening(
     let mut best_moves: Vec<BoardEvaluation> = Default::default();
     let mut depth = 0;
     loop {
+        let search_first = best_moves
+            .iter()
+            .map(|eval| eval.best_move.clone())
+            .collect::<Vec<_>>();
         match alpha_beta(
             game,
             depth + 1,
             WHITE_LOSES_BLACK_WINS,
             WHITE_WINS_BLACK_LOSES,
             player,
-            &[], // TODO
+            &search_first,
             deadline,
         ) {
             AlphaBetaResult::Stopped => {
@@ -281,15 +286,15 @@ fn moves_ordered_by_heuristic_quality(game: &Game, player: Player) -> Vec<Player
         (-1, 0) => Some(Direction::Left),
         _ => None,
     } {
-        for direction in Direction::iter() {
+        for direction in Direction::iter().filter(|&d| d != jump_direction.opposite()) {
             push_if_move_piece_is_legal(&mut moves, jump_direction, direction);
         }
         for direction in Direction::iter().filter(|&d| d != jump_direction) {
-            push_if_move_piece_is_legal(&mut moves, direction, Direction::Up);
+            push_if_move_piece_is_legal(&mut moves, direction, direction);
         }
     } else {
         for direction in Direction::iter() {
-            push_if_move_piece_is_legal(&mut moves, direction, Direction::Up);
+            push_if_move_piece_is_legal(&mut moves, direction, direction);
         }
     }
     if game.walls_left[player.as_index()] > 0 {
