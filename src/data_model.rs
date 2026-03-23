@@ -4,6 +4,8 @@ pub const PIECE_GRID_WIDTH: usize = 9;
 pub const PIECE_GRID_HEIGHT: usize = 9;
 pub const WALL_GRID_WIDTH: usize = PIECE_GRID_WIDTH - 1;
 pub const WALL_GRID_HEIGHT: usize = PIECE_GRID_HEIGHT - 1;
+pub const STARTING_WALLS: usize = 10;
+pub const TOTAL_WALLS: usize = 2 * STARTING_WALLS;
 pub const PLAYER_COUNT: usize = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -148,12 +150,11 @@ impl Board {
 }
 
 impl Game {
-    pub fn 
-    new() -> Self {
+    pub fn new() -> Self {
         Self {
             player: Player::default(),
             board: Board::new(),
-            walls_left: [10, 10],
+            walls_left: [STARTING_WALLS, STARTING_WALLS],
         }
     }
 }

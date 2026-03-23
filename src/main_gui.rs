@@ -1,27 +1,20 @@
-use crate::commands::{Command, Session, execute_command, get_legal_command};
-use crate::data_model::{Game, Player};
-use crate::player_type::PlayerType;
-use crate::nn_bot::{QuoridorNet};
 use clap::Parser;
-use ggez::conf::WindowMode;
-use ggez::event::{self, EventHandler};
-use ggez::{Context, ContextBuilder, GameResult};
-use std::collections::HashMap;
-use std::sync::mpsc::{Receiver, channel};
-use burn::backend::NdArray;
-
-
-pub mod all_moves;
-pub mod a_star;
-pub mod bot;
-pub mod nn_bot;
-pub mod commands;
-pub mod data_model;
-pub mod draw;
-pub mod game_logic;
-pub mod player_type;
-pub mod render_board;
-pub mod square_outline_iterator;
+use ggez::{
+    conf::WindowMode,
+    event::{self, EventHandler},
+    {Context, ContextBuilder, GameResult},
+};
+use lib::{
+    commands::{self, Command, Session, execute_command, get_legal_command},
+    data_model::{Game, Player},
+    draw,
+    nn_bot::QuoridorNet,
+    player_type::PlayerType,
+};
+use std::{
+    collections::HashMap,
+    sync::mpsc::{Receiver, channel},
+};
 
 #[derive(clap_derive::Parser, Debug)]
 struct Args {
@@ -55,12 +48,10 @@ fn main() {
 
     let mut neural_networks: HashMap<Player, QuoridorNet> = HashMap::new();
 
-    if args.player_a == PlayerType::NeuralNet
-    {
+    if args.player_a == PlayerType::NeuralNet {
         neural_networks.insert(Player::White, QuoridorNet::new());
     }
-    if args.player_b == PlayerType::NeuralNet
-    {
+    if args.player_b == PlayerType::NeuralNet {
         neural_networks.insert(Player::Black, QuoridorNet::new());
     }
 
@@ -96,9 +87,9 @@ fn main() {
             );
             let command = match player_type(player) {
                 PlayerType::Human => get_legal_command(current_game_state, player),
-                PlayerType::NeuralNet => {
-                    Command::AuxCommand(commands::AuxCommand::PlayNNMove {temperature: args.temperature})
-                },
+                PlayerType::NeuralNet => Command::AuxCommand(commands::AuxCommand::PlayNNMove {
+                    temperature: args.temperature,
+                }),
                 PlayerType::Bot => Command::AuxCommand(commands::AuxCommand::PlayBotMove {
                     depth: args.depth,
                     seconds: args.seconds,

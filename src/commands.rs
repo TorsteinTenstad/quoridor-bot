@@ -1,4 +1,4 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 use clap::Parser;
 
@@ -6,7 +6,7 @@ use crate::{
     bot::{best_move_alpha_beta, best_move_alpha_beta_iterative_deepening},
     data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
     game_logic::{execute_move_unchecked, is_move_legal},
-    nn_bot::{self, QuoridorNet}
+    nn_bot::{self, QuoridorNet},
 };
 
 use std::{fmt::Display, time::Duration};
@@ -72,10 +72,10 @@ pub struct Session {
     pub moves: Vec<PlayerMove>,
 }
 impl Session {
-    pub(crate) fn new(neural_networks: HashMap<Player, QuoridorNet>) -> Self {
+    pub fn new(neural_networks: HashMap<Player, QuoridorNet>) -> Self {
         Self {
             game_states: vec![Game::new()],
-            neural_networks: neural_networks,
+            neural_networks,
             moves: Vec::new(),
         }
     }
@@ -92,7 +92,7 @@ pub fn execute_command(session: &mut Session, command: Command) {
             session.moves.push(player_move);
         }
         Command::AuxCommand(aux_command) => match aux_command {
-            AuxCommand::Reset => {*session = Session::new(HashMap::new())},
+            AuxCommand::Reset => *session = Session::new(HashMap::new()),
             AuxCommand::BotMove { depth, seconds } => {
                 let bot_move = get_bot_move(
                     current_game_state,
@@ -115,14 +115,17 @@ pub fn execute_command(session: &mut Session, command: Command) {
                 session.game_states.push(next_game_state);
                 session.moves.push(bot_move.player_move);
             }
-            AuxCommand::PlayNNMove {temperature} =>
-            {
-                let nn_move = nn_bot::get_move(&current_game_state, session.neural_networks.get(&player).unwrap(), player, temperature);
-                
+            AuxCommand::PlayNNMove { temperature } => {
+                let nn_move = nn_bot::get_move(
+                    current_game_state,
+                    session.neural_networks.get(&player).unwrap(),
+                    player,
+                    temperature,
+                );
+
                 let mut next_game_state = current_game_state.clone();
                 execute_move_unchecked(&mut next_game_state, player, &nn_move);
                 session.game_states.push(next_game_state);
-
             }
             AuxCommand::Undo { moves } => {
                 for _ in 0..moves {

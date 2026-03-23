@@ -2,9 +2,10 @@ use std::time::{Duration, SystemTime};
 
 use crate::{
     a_star::a_star,
+    a_star_to_opponent::a_star_to_opponent,
     data_model::{
-        Direction, Game, MovePiece, Player, PlayerMove, WALL_GRID_HEIGHT, WALL_GRID_WIDTH,
-        WallOrientation, WallPosition,
+        Direction, Game, MovePiece, PIECE_GRID_HEIGHT, Player, PlayerMove, TOTAL_WALLS,
+        WALL_GRID_HEIGHT, WALL_GRID_WIDTH, WallOrientation, WallPosition,
     },
     game_logic::{
         execute_move_unchecked, is_move_piece_legal_with_player_at_position,
@@ -38,8 +39,25 @@ pub fn heuristic_board_score(game: &Game) -> isize {
     let black_walls_left = game.walls_left[Player::Black.as_index()] as isize;
     let distance_score = black_distance - white_distance;
     let wall_score = white_walls_left - black_walls_left;
-    let (distance_priority, wall_priority) = (1, 0);
-    distance_priority * distance_score + wall_priority * wall_score
+    let total_walls_played = TOTAL_WALLS
+        - game.walls_left[Player::White.as_index()]
+        - game.walls_left[Player::Black.as_index()];
+    let wall_progress = total_walls_played as f32 / TOTAL_WALLS as f32;
+    let wall_value = 0.75 - 0.5 * wall_progress;
+    let (distance_priority, wall_priority) = (1, wall_value);
+
+    let path_length_between_players = a_star_to_opponent(&game.board, game.player)
+        .map(|v| v.len())
+        .unwrap_or(usize::MAX);
+
+    let side = 2.0 * game.board.player_position(game.player).y() as f32
+        / (PIECE_GRID_HEIGHT - 1) as f32
+        - 1.0;
+
+    let side_component = -side * 20.0 / path_length_between_players as f32;
+
+    distance_priority * distance_score
+        + (wall_priority * wall_score as f32 + side_component) as isize
 }
 
 pub fn best_move_alpha_beta_iterative_deepening(

@@ -11,18 +11,20 @@
 //
 // You can split this into modules later; kept single-file for clarity.
 
-use burn::backend::NdArray;
-use rand::{prelude::*, rng};
 use burn;
-use burn::nn::{self, Initializer, Relu};
-use burn::tensor::{backend::Backend, Tensor};
+use burn::backend::NdArray;
 use burn::module::Module;
 use burn::nn::conv::{Conv2d, Conv2dConfig};
+use burn::nn::{self, Initializer, Relu};
+use burn::tensor::{Tensor, backend::Backend};
+use rand::{prelude::*, rng};
 
-use crate::data_model::{Game, Player, PlayerMove, WallOrientation, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, WALL_GRID_HEIGHT, WALL_GRID_WIDTH};
 use crate::all_moves::ALL_MOVES;
+use crate::data_model::{
+    Game, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, Player, PlayerMove, WALL_GRID_HEIGHT,
+    WALL_GRID_WIDTH, WallOrientation,
+};
 use crate::game_logic::is_move_legal;
-
 
 // ===== 0) Domain adapter =====
 // Glue layer between YOUR existing rules/state and this scaffold.
@@ -34,7 +36,7 @@ pub type ActionId = u16; // keep it small
 #[derive(Clone)]
 pub struct EncodedState {
     pub planes: Vec<Vec<Vec<f32>>>, // length = C*9*9
-    pub c: usize,         // channels
+    pub c: usize,                   // channels
 }
 
 /// Mask of legal actions aligned with the fixed action space.
@@ -43,29 +45,40 @@ pub struct ActionMask(pub [bool; ACTIONS]);
 
 pub const ACTIONS: usize = 138; // adjust if you use a different scheme
 
-
 fn action_from_id(action_id: ActionId) -> PlayerMove {
-    return ALL_MOVES.get(action_id as usize).unwrap().clone();
+    ALL_MOVES.get(action_id as usize).unwrap().clone()
 }
 
-pub fn get_move(game: &Game, network: &QuoridorNet, player: Player, temperature: f32) -> PlayerMove
-{
+pub fn get_move(
+    game: &Game,
+    network: &QuoridorNet,
+    player: Player,
+    temperature: f32,
+) -> PlayerMove {
     let mut rng = rng();
 
     let prediction = predict_batch(network, &[encode(game)]);
 
-    let legal_moves: Vec<(usize, &f32)> = prediction.first().unwrap().policy_logits.iter().enumerate()
-        .filter(|(id, _)|{is_move_legal(game, player, &action_from_id(*id as u16))}).collect();
-
+    let legal_moves: Vec<(usize, &f32)> = prediction
+        .first()
+        .unwrap()
+        .policy_logits
+        .iter()
+        .enumerate()
+        .filter(|(id, _)| is_move_legal(game, player, &action_from_id(*id as u16)))
+        .collect();
 
     // Apply temperature
-    let max_logit = legal_moves.iter().map(|&(_, l)| l.clone()).fold(f32::NEG_INFINITY, f32::max);
+    let max_logit = legal_moves
+        .iter()
+        .map(|&(_, l)| *l)
+        .fold(f32::NEG_INFINITY, f32::max);
     let exp_logits: Vec<f32> = legal_moves
         .iter()
         .map(|&(_, logit)| ((logit - max_logit) / temperature).exp())
         .collect();
 
-        // Normalize into probabilities
+    // Normalize into probabilities
     let sum_exp: f32 = exp_logits.iter().sum();
     let probs: Vec<f32> = exp_logits.iter().map(|x| x / sum_exp).collect();
 
@@ -74,7 +87,7 @@ pub fn get_move(game: &Game, network: &QuoridorNet, player: Player, temperature:
     let choice = dist.sample(&mut rng);
 
     // Extract the most likely move from the output
-    action_from_id( legal_moves[choice].0 as u16)
+    action_from_id(legal_moves[choice].0 as u16)
 }
 
 fn encode(game: &Game) -> EncodedState {
@@ -92,10 +105,8 @@ fn encode(game: &Game) -> EncodedState {
         for y in 0..WALL_GRID_HEIGHT {
             if let Some(o) = game.board.walls[x][y] {
                 match o {
-                    WallOrientation::Horizontal =>
-                        channels[2][y][x] = 1.0,
-                    WallOrientation::Vertical =>
-                        channels[3][y][x] = 1.0,
+                    WallOrientation::Horizontal => channels[2][y][x] = 1.0,
+                    WallOrientation::Vertical => channels[3][y][x] = 1.0,
                 }
             }
         }
@@ -117,7 +128,10 @@ fn encode(game: &Game) -> EncodedState {
         }
     }
 
-    EncodedState { planes: channels, c: 8 }
+    EncodedState {
+        planes: channels,
+        c: 8,
+    }
 }
 
 // ===== 1) Policy-Value Network interface =====
@@ -131,7 +145,6 @@ pub struct NetOut {
 
 /// Backend-agnostic network interface. Implement with `burn`, `tch`, `candle`, etc.
 pub trait PolicyValueNet: Send + 'static {
-
     /// Inference on a *batch* of encoded states. Must be thread-safe; do batching on GPU here.
     fn predict_batch(&self, batch: &[EncodedState]) -> Vec<NetOut>;
 
@@ -527,19 +540,16 @@ pub trait PolicyValueNet: Send + 'static {
 //     fn train_step(&mut self, _batch: &[(EncodedState, [f32; ACTIONS], f32)]) -> (f32, f32) { (0.0, 0.0) }
 // }
 
-
 /// Burn network
 
 /// Quoridor AlphaZero-style network.
-pub struct QuoridorNet
-{
+pub struct QuoridorNet {
     device: <NdArray as burn::prelude::Backend>::Device,
-    network_model: NetworkModel
+    network_model: NetworkModel,
 }
 
 #[derive(Module, Debug, Clone)]
-pub struct NetworkModel
-{
+pub struct NetworkModel {
     conv1: Conv2d<NdArray>,
     conv2: Conv2d<NdArray>,
     fc_policy: nn::Linear<NdArray>,
@@ -557,22 +567,34 @@ impl QuoridorNet {
     pub fn new() -> Self {
         let device = <NdArray as burn::prelude::Backend>::Device::default();
 
-        let conv_cfg = Conv2dConfig::new([7, 64], [3, 3])
-            .with_initializer(Initializer::KaimingUniform { gain: 1.0, fan_out_only: false }); // in_channels=7, out=64
+        let conv_cfg =
+            Conv2dConfig::new([7, 64], [3, 3]).with_initializer(Initializer::KaimingUniform {
+                gain: 1.0,
+                fan_out_only: false,
+            }); // in_channels=7, out=64
 
         let conv1 = conv_cfg.init(&device);
 
-        let conv_cfg2 = Conv2dConfig::new([64, 64], [3, 3])
-          .with_initializer(Initializer::KaimingUniform { gain: 1.0, fan_out_only: false });
+        let conv_cfg2 =
+            Conv2dConfig::new([64, 64], [3, 3]).with_initializer(Initializer::KaimingUniform {
+                gain: 1.0,
+                fan_out_only: false,
+            });
         let conv2 = conv_cfg2.init(&device);
 
         // Flatten feature map (approx 64 * 5 * 5 after two 3x3 conv on 9x9 input, no padding)
         let fc_policy = nn::LinearConfig::new(64 * 5 * 5, 138)
-            .with_initializer(Initializer::KaimingUniform { gain: 1.0, fan_out_only: false })
+            .with_initializer(Initializer::KaimingUniform {
+                gain: 1.0,
+                fan_out_only: false,
+            })
             .init(&device);
 
         let fc_value1 = nn::LinearConfig::new(64 * 5 * 5, 64)
-            .with_initializer(Initializer::KaimingUniform { gain: 1.0, fan_out_only: false })
+            .with_initializer(Initializer::KaimingUniform {
+                gain: 1.0,
+                fan_out_only: false,
+            })
             .init(&device);
 
         let fc_value2 = nn::LinearConfig::new(64, 1)
@@ -581,13 +603,18 @@ impl QuoridorNet {
 
         Self {
             device,
-            network_model: NetworkModel { conv1, conv2, fc_policy, fc_value1, fc_value2 }
+            network_model: NetworkModel {
+                conv1,
+                conv2,
+                fc_policy,
+                fc_value1,
+                fc_value2,
+            },
         }
     }
 }
 
-impl NetworkModel
-{
+impl NetworkModel {
     pub fn forward(&self, x: Tensor<NdArray, 4>) -> NeuralNetOutput<NdArray> {
         let relu = Relu::new();
         // x: [batch, 7, 9, 9]
@@ -610,7 +637,6 @@ impl NetworkModel
         NeuralNetOutput { policy, value }
     }
 }
-
 
 pub fn encode_batch_to_tensor<B: Backend>(
     batch: &[EncodedState],
@@ -641,7 +667,7 @@ pub fn encode_batch_to_tensor<B: Backend>(
 }
 
 fn predict_batch(network: &QuoridorNet, batch: &[EncodedState]) -> Vec<NetOut> {
-// Convert batch &[EncodedState] → Tensor<B,4> of shape [batch, 7, 9, 9]
+    // Convert batch &[EncodedState] → Tensor<B,4> of shape [batch, 7, 9, 9]
     let input = encode_batch_to_tensor::<NdArray>(batch, &network.device);
 
     let out = network.network_model.forward(input);
@@ -649,12 +675,15 @@ fn predict_batch(network: &QuoridorNet, batch: &[EncodedState]) -> Vec<NetOut> {
     // Map NetOut<B> → your NetOut type (convert tensor to Vec<f32>)
     let values: Vec<f32> = out.value.into_data().to_vec().unwrap();
 
-    out.policy.iter_dim(0)
-        .zip(values.into_iter())
+    out.policy
+        .iter_dim(0)
+        .zip(values)
         .map(|(p, v)| {
             let policy_vec: Vec<f32> = p.into_data().to_vec().unwrap();
-            NetOut { policy_logits: policy_vec.try_into().expect("Policy wrong length"), value: v }})
+            NetOut {
+                policy_logits: policy_vec.try_into().expect("Policy wrong length"),
+                value: v,
+            }
+        })
         .collect()
 }
-
-

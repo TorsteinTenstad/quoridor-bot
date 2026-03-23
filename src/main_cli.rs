@@ -1,25 +1,12 @@
-use std::collections::HashMap;
-
 use clap::Parser;
-use burn::backend::NdArray ;
-
-
-use crate::commands::{Command, Session, execute_command, get_legal_command};
-use crate::data_model::{Player};
-use crate::player_type::{PlayerType};
-use crate::nn_bot::{QuoridorNet};
-
-
-pub mod all_moves;
-pub mod nn_bot;
-pub mod a_star;
-pub mod bot;
-pub mod commands;
-pub mod data_model;
-pub mod game_logic;
-pub mod player_type;
-pub mod render_board;
-pub mod square_outline_iterator;
+use lib::{
+    commands::{self, Command, Session, execute_command, get_legal_command},
+    data_model::Player,
+    nn_bot::QuoridorNet,
+    player_type::PlayerType,
+    render_board,
+};
+use std::collections::HashMap;
 
 #[derive(clap_derive::Parser, Debug)]
 struct Args {
@@ -42,16 +29,12 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    let device = <NdArray as burn::prelude::Backend>::Device::default();
-
     let mut neural_networks: HashMap<Player, QuoridorNet> = HashMap::new();
 
-    if args.player_a == PlayerType::NeuralNet
-    {
+    if args.player_a == PlayerType::NeuralNet {
         neural_networks.insert(Player::White, QuoridorNet::new());
     }
-    if args.player_b == PlayerType::NeuralNet
-    {
+    if args.player_b == PlayerType::NeuralNet {
         neural_networks.insert(Player::Black, QuoridorNet::new());
     }
 
@@ -80,9 +63,9 @@ fn main() {
 
         let command = match player_type(player) {
             PlayerType::Human => get_legal_command(current_game_state, player),
-            PlayerType::NeuralNet => {
-                Command::AuxCommand(commands::AuxCommand::PlayNNMove {temperature: args.temperature})
-            },
+            PlayerType::NeuralNet => Command::AuxCommand(commands::AuxCommand::PlayNNMove {
+                temperature: args.temperature,
+            }),
             PlayerType::Bot => Command::AuxCommand(commands::AuxCommand::PlayBotMove {
                 depth: Some(args.depth),
                 seconds: None,
