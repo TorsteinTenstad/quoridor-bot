@@ -1,15 +1,11 @@
-use std::collections::HashMap;
-
-use clap::Parser;
-
 use crate::{
     bot::{best_move_alpha_beta, best_move_alpha_beta_iterative_deepening},
     data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
     game_logic::{execute_move_unchecked, is_move_legal},
     nn_bot::{self, QuoridorNet},
 };
-
-use std::{fmt::Display, time::Duration};
+use clap::Parser;
+use std::{collections::HashMap, fmt::Display, path::PathBuf, time::Duration};
 
 #[derive(clap_derive::Subcommand, Debug)]
 pub enum AuxCommand {
@@ -46,10 +42,16 @@ pub enum AuxCommand {
         #[arg(short, long, group = "time_control")]
         seconds: Option<u64>,
     },
-    Export,
+    Export {
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+    },
     Import {
-        #[arg()]
+        #[arg(group = "source", default_value_t = String::default())]
         moves_string: String,
+
+        #[arg(short, long, group = "source")]
+        file: Option<PathBuf>,
     },
 }
 const AUX_COMMAND_NAME: &str = "";
@@ -169,13 +171,33 @@ pub fn execute_command(session: &mut Session, command: Command) {
                     println!("Best move evaluates to {}", score);
                 }
             }
-            AuxCommand::Export => {
-                for m in &session.moves {
-                    print!("{m};");
+            AuxCommand::Export { file } => {
+                let exported = session
+                    .moves
+                    .iter()
+                    .map(|m| format!("{m};"))
+                    .collect::<String>();
+                match file {
+                    None => {
+                        println!("{exported}")
+                    }
+                    Some(path) => match std::fs::write(&path, exported) {
+                        Err(e) => println!("{}", e),
+                        Ok(()) => println!("Game saved to {}", path.display()),
+                    },
                 }
-                println!();
             }
-            AuxCommand::Import { moves_string } => {
+            AuxCommand::Import { moves_string, file } => {
+                let moves_string = match file {
+                    None => moves_string,
+                    Some(path) => match std::fs::read(path) {
+                        Ok(vec) => String::from_utf8_lossy(&vec).into(),
+                        Err(e) => {
+                            println!("{:?}", e);
+                            return;
+                        }
+                    },
+                };
                 if let Some(moves) = moves_string
                     .trim_matches(';')
                     .split(';')

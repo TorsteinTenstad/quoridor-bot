@@ -112,8 +112,12 @@ pub fn alpha_beta(
     search_first: Option<PlayerMove>,
     stop: Option<&dyn Fn() -> bool>,
 ) -> (isize, Option<PlayerMove>) {
-    if depth == 0 {
-        return (heuristic_board_score(game), None);
+    let heuristic_board_score = heuristic_board_score(game);
+    if depth == 0
+        || heuristic_board_score == WHITE_LOSES_BLACK_WINS
+        || heuristic_board_score == WHITE_WINS_BLACK_LOSES
+    {
+        return (heuristic_board_score, None);
     }
     let mut alpha = alpha;
     let mut beta = beta;
