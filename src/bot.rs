@@ -1,5 +1,3 @@
-use std::time::{Duration, SystemTime};
-
 use crate::{
     a_star::a_star,
     a_star_to_opponent::a_star_to_opponent,
@@ -14,6 +12,11 @@ use crate::{
     render_board,
     square_outline_iterator::SquareOutlineIterator,
 };
+use std::{
+    fmt::Display,
+    time::{Duration, Instant},
+};
+
 pub const WHITE_LOSES_BLACK_WINS: isize = isize::MIN + 1;
 pub const WHITE_WINS_BLACK_LOSES: isize = -WHITE_LOSES_BLACK_WINS;
 
@@ -64,68 +67,98 @@ pub fn best_move_alpha_beta_iterative_deepening(
     game: &Game,
     player: Player,
     search_duration: Duration,
-) -> (isize, Option<PlayerMove>, usize) {
-    let start = SystemTime::now();
-    let stop = || SystemTime::now().duration_since(start).unwrap() > search_duration;
-
-    let mut best_move: Option<PlayerMove> = None;
-    let mut depth = 1;
+) -> Vec<BoardEvaluation> {
+    let deadline = Some(Instant::now() + search_duration);
+    let mut best_moves: Vec<BoardEvaluation> = Default::default();
+    let mut depth = 0;
     loop {
-        let (score, new_move) = alpha_beta(
+        match alpha_beta(
             game,
-            depth,
+            depth + 1,
             WHITE_LOSES_BLACK_WINS,
             WHITE_WINS_BLACK_LOSES,
             player,
-            best_move.clone(),
-            Some(&stop),
-        );
-        best_move = new_move;
-        if stop() {
-            break (score, best_move, depth);
+            &[], // TODO
+            deadline,
+        ) {
+            AlphaBetaResult::Stopped => {
+                break best_moves;
+            }
+            AlphaBetaResult::Moves((_, moves)) => {
+                best_moves = moves;
+                depth += 1;
+            }
         }
-        depth += 1;
     }
 }
-pub fn best_move_alpha_beta(
-    game: &Game,
-    player: Player,
-    depth: usize,
-) -> (isize, Option<PlayerMove>) {
-    alpha_beta(
+pub fn best_move_alpha_beta(game: &Game, player: Player, depth: usize) -> Vec<BoardEvaluation> {
+    match alpha_beta(
         game,
         depth,
         WHITE_LOSES_BLACK_WINS,
         WHITE_WINS_BLACK_LOSES,
         player,
+        Default::default(),
         None,
-        None,
-    )
+    ) {
+        AlphaBetaResult::Stopped => unreachable!(),
+        AlphaBetaResult::Moves((_, moves)) => moves,
+    }
 }
 
-pub fn alpha_beta(
+pub struct BoardEvaluation {
+    pub score: isize,
+    pub best_move: PlayerMove,
+    pub depth: usize,
+}
+
+impl Display for BoardEvaluation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.best_move)?;
+        write!(f, " score:{}", self.score)?;
+        write!(f, " depth:{}", self.depth)?;
+        Ok(())
+    }
+}
+enum AlphaBetaResult {
+    Moves((isize, Vec<BoardEvaluation>)),
+    Stopped,
+}
+
+fn alpha_beta(
     game: &Game,
     depth: usize,
     alpha: isize,
     beta: isize,
     player: Player,
-    search_first: Option<PlayerMove>,
-    stop: Option<&dyn Fn() -> bool>,
-) -> (isize, Option<PlayerMove>) {
+    search_first: &[PlayerMove],
+    deadline: Option<Instant>,
+) -> AlphaBetaResult {
+    if deadline.is_some_and(|deadline| Instant::now() > deadline) {
+        return AlphaBetaResult::Stopped;
+    }
     let heuristic_board_score = heuristic_board_score(game);
     if depth == 0
         || heuristic_board_score == WHITE_LOSES_BLACK_WINS
         || heuristic_board_score == WHITE_WINS_BLACK_LOSES
     {
-        return (heuristic_board_score, None);
+        return AlphaBetaResult::Moves((heuristic_board_score, Default::default()));
     }
+    let (last, rest) = search_first
+        .split_last()
+        .map(|(last, rest)| (Some(last), rest))
+        .unwrap_or((None, &[]));
     let mut alpha = alpha;
     let mut beta = beta;
-    let mut best_move = None;
-    let score = match player {
+    let mut best_moves = Vec::new();
+    match player {
         Player::White => {
             let mut value = WHITE_LOSES_BLACK_WINS;
-            for player_move in moves_ordered_by_heuristic_quality(game, player, search_first) {
+            for player_move in last
+                .cloned()
+                .into_iter()
+                .chain(moves_ordered_by_heuristic_quality(game, player))
+            {
                 let mut child_game_state = game.clone();
                 execute_move_unchecked(&mut child_game_state, player, &player_move);
                 if a_star(&child_game_state.board, player).is_none()
@@ -133,32 +166,47 @@ pub fn alpha_beta(
                 {
                     continue;
                 }
-                let (score, _) = alpha_beta(
+                let (score, moves) = match alpha_beta(
                     &child_game_state,
                     depth - 1,
                     alpha,
                     beta,
                     player.opponent(),
-                    None,
-                    None,
-                );
-                if score > value || best_move.is_none() {
-                    best_move = Some(player_move);
+                    if Some(&player_move) == last {
+                        rest
+                    } else {
+                        &[]
+                    },
+                    deadline,
+                ) {
+                    AlphaBetaResult::Moves(moves) => moves,
+                    AlphaBetaResult::Stopped => {
+                        return AlphaBetaResult::Stopped;
+                    }
+                };
+                if score > value || best_moves.is_empty() {
+                    best_moves = moves;
+                    best_moves.push(BoardEvaluation {
+                        score,
+                        best_move: player_move,
+                        depth,
+                    });
                 }
                 value = isize::max(value, score);
                 if value >= beta {
                     break;
                 }
                 alpha = isize::max(alpha, value);
-                if stop.is_some_and(|f| f()) {
-                    break;
-                }
             }
-            value
+            AlphaBetaResult::Moves((value, best_moves))
         }
         Player::Black => {
             let mut value = WHITE_WINS_BLACK_LOSES;
-            for player_move in moves_ordered_by_heuristic_quality(game, player, search_first) {
+            for player_move in last
+                .cloned()
+                .into_iter()
+                .chain(moves_ordered_by_heuristic_quality(game, player))
+            {
                 let mut child_game_state = game.clone();
                 execute_move_unchecked(&mut child_game_state, player, &player_move);
                 if a_star(&child_game_state.board, player).is_none()
@@ -166,42 +214,45 @@ pub fn alpha_beta(
                 {
                     continue;
                 }
-                let (score, _) = alpha_beta(
+                let (score, moves) = match alpha_beta(
                     &child_game_state,
                     depth - 1,
                     alpha,
                     beta,
                     player.opponent(),
-                    None,
-                    None,
-                );
-                if score < value || best_move.is_none() {
-                    best_move = Some(player_move);
+                    if Some(&player_move) == last {
+                        rest
+                    } else {
+                        &[]
+                    },
+                    deadline,
+                ) {
+                    AlphaBetaResult::Moves(moves) => moves,
+                    AlphaBetaResult::Stopped => {
+                        return AlphaBetaResult::Stopped;
+                    }
+                };
+                if score < value || best_moves.is_empty() {
+                    best_moves = moves;
+                    best_moves.push(BoardEvaluation {
+                        score,
+                        best_move: player_move,
+                        depth,
+                    });
                 }
                 value = isize::min(value, score);
                 if value <= alpha {
                     break;
                 }
                 beta = isize::min(beta, value);
-                if stop.is_some_and(|f| f()) {
-                    break;
-                }
             }
-            value
+            AlphaBetaResult::Moves((value, best_moves))
         }
-    };
-    (score, best_move)
+    }
 }
 
-fn moves_ordered_by_heuristic_quality(
-    game: &Game,
-    player: Player,
-    search_first: Option<PlayerMove>,
-) -> Vec<PlayerMove> {
+fn moves_ordered_by_heuristic_quality(game: &Game, player: Player) -> Vec<PlayerMove> {
     let mut moves: Vec<PlayerMove> = Default::default();
-    if let Some(search_first) = search_first {
-        moves.push(search_first); // TODO: Could ensure that the code below does not also add this mode. Unclear if this is worth it.
-    }
     let player_position = game.board.player_position(player);
     let opponent_position = game.board.player_position(player.opponent());
     let x_diff = opponent_position.x() as isize - player_position.x() as isize;

@@ -1,11 +1,11 @@
 use crate::{
-    bot::{best_move_alpha_beta, best_move_alpha_beta_iterative_deepening},
+    bot::{BoardEvaluation, best_move_alpha_beta, best_move_alpha_beta_iterative_deepening},
     data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
     game_logic::{execute_move_unchecked, is_move_legal},
     nn_bot::{self, QuoridorNet},
 };
 use clap::Parser;
-use std::{collections::HashMap, fmt::Display, path::PathBuf, time::Duration};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 #[derive(clap_derive::Subcommand, Debug)]
 pub enum AuxCommand {
@@ -96,26 +96,30 @@ pub fn execute_command(session: &mut Session, command: Command) {
         Command::AuxCommand(aux_command) => match aux_command {
             AuxCommand::Reset => *session = Session::new(HashMap::new()),
             AuxCommand::BotMove { depth, seconds } => {
-                let bot_move = get_bot_move(
+                let (_, best_moves) = get_bot_move(
                     current_game_state,
                     player,
                     depth,
                     seconds.map(Duration::from_secs),
                 );
-                println!("{bot_move}");
+                for eval in best_moves.iter().rev() {
+                    println!("{eval}");
+                }
             }
             AuxCommand::PlayBotMove { depth, seconds } => {
-                let bot_move = get_bot_move(
+                let (duration, best_moves) = get_bot_move(
                     current_game_state,
                     player,
                     depth,
                     seconds.map(Duration::from_secs),
                 );
-                println!("{bot_move}");
+                let best_move = best_moves.last().unwrap();
+                println!("{} {:?}", best_move, duration);
                 let mut next_game_state = current_game_state.clone();
-                execute_move_unchecked(&mut next_game_state, player, &bot_move.player_move);
+                let player_move = &best_move.best_move;
+                execute_move_unchecked(&mut next_game_state, player, player_move);
                 session.game_states.push(next_game_state);
-                session.moves.push(bot_move.player_move);
+                session.moves.push(player_move.clone());
             }
             AuxCommand::PlayNNMove { temperature } => {
                 let nn_move = nn_bot::get_move(
@@ -148,13 +152,13 @@ pub fn execute_command(session: &mut Session, command: Command) {
                         if is_move_legal(current_game_state, player, &player_move) {
                             let mut child_game_state = current_game_state.clone();
                             execute_move_unchecked(&mut child_game_state, player, &player_move);
-                            let score = get_bot_move(
+                            let (_, best_moves) = get_bot_move(
                                 &child_game_state,
                                 player,
                                 depth,
                                 seconds.map(Duration::from_secs),
                             );
-                            println!("{}", score);
+                            println!("{}", best_moves.last().unwrap().score);
                         } else {
                             println!("Invalid move");
                         }
@@ -162,13 +166,16 @@ pub fn execute_command(session: &mut Session, command: Command) {
                         println!("Could not parse move: {}", move_str);
                     }
                 } else {
-                    let score = get_bot_move(
+                    let (_, best_moves) = get_bot_move(
                         current_game_state,
                         player,
                         depth,
                         seconds.map(Duration::from_secs),
                     );
-                    println!("Best move evaluates to {}", score);
+                    println!(
+                        "Best move evaluates to {}",
+                        best_moves.last().unwrap().score
+                    );
                 }
             }
             AuxCommand::Export { file } => {
@@ -306,52 +313,19 @@ pub fn parse_player_move(input: &str) -> Option<PlayerMove> {
     }
 }
 
-pub struct BotMove {
-    player_move: PlayerMove,
-    score: isize,
-    depth: usize,
-    planned_duration: Option<Duration>,
-    actual_duration: Duration,
-}
-
-impl Display for BotMove {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.player_move)?;
-        write!(f, " score:{}", self.score)?;
-        write!(f, " depth:{}", self.depth)?;
-        write!(f, " {:?}", self.actual_duration)?;
-        if let Some(d) = self.planned_duration {
-            write!(f, "({:?})", d)?;
-        }
-        Ok(())
-    }
-}
-
 fn get_bot_move(
     game: &Game,
     player: Player,
     depth: Option<usize>,
     duration: Option<Duration>,
-) -> BotMove {
+) -> (Duration, Vec<BoardEvaluation>) {
     let start_time = std::time::Instant::now();
-    let (score, best_move, depth, planned_duration) = match (depth, duration) {
-        (Some(depth), _) => {
-            let (score, best_move) = best_move_alpha_beta(game, player, depth);
-            (score, best_move, depth, None)
-        }
+    let best_moves = match (depth, duration) {
+        (Some(depth), _) => best_move_alpha_beta(game, player, depth),
         (_, duration) => {
             let duration = duration.unwrap_or(Duration::from_secs(3));
-            let (score, best_move, depth) =
-                best_move_alpha_beta_iterative_deepening(game, player, duration);
-            (score, best_move, depth, Some(duration))
+            best_move_alpha_beta_iterative_deepening(game, player, duration)
         }
     };
-    let elapsed = start_time.elapsed();
-    BotMove {
-        player_move: best_move.unwrap(),
-        score,
-        depth,
-        planned_duration,
-        actual_duration: elapsed,
-    }
+    (start_time.elapsed(), best_moves)
 }

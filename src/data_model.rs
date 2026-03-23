@@ -44,7 +44,7 @@ impl PiecePosition {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct WallPosition {
     pub x: usize,
     pub y: usize,
@@ -73,13 +73,13 @@ pub enum Direction {
     Right,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MovePiece {
     pub direction: Direction,
     pub direction_on_collision: Direction,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlayerMove {
     PlaceWall {
         orientation: WallOrientation,
