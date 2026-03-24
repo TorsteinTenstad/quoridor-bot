@@ -13,6 +13,7 @@ use crate::{
     square_outline_iterator::SquareOutlineIterator,
 };
 use std::{
+    collections::HashMap,
     fmt::Display,
     time::{Duration, Instant},
 };
@@ -68,6 +69,7 @@ pub fn best_move_alpha_beta_iterative_deepening(
     game: &Game,
     player: Player,
     search_duration: Duration,
+    cache: &mut Cache,
 ) -> Vec<BoardEvaluation> {
     let deadline = Some(Instant::now() + search_duration);
     let mut best_moves: Vec<BoardEvaluation> = Default::default();
@@ -85,6 +87,7 @@ pub fn best_move_alpha_beta_iterative_deepening(
             player,
             &search_first,
             deadline,
+            cache,
         ) {
             AlphaBetaResult::Stopped => {
                 break best_moves;
@@ -96,7 +99,12 @@ pub fn best_move_alpha_beta_iterative_deepening(
         }
     }
 }
-pub fn best_move_alpha_beta(game: &Game, player: Player, depth: usize) -> Vec<BoardEvaluation> {
+pub fn best_move_alpha_beta(
+    game: &Game,
+    player: Player,
+    depth: usize,
+    cache: &mut Cache,
+) -> Vec<BoardEvaluation> {
     match alpha_beta(
         game,
         depth,
@@ -105,12 +113,14 @@ pub fn best_move_alpha_beta(game: &Game, player: Player, depth: usize) -> Vec<Bo
         player,
         Default::default(),
         None,
+        cache,
     ) {
         AlphaBetaResult::Stopped => unreachable!(),
         AlphaBetaResult::Moves((_, moves)) => moves,
     }
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BoardEvaluation {
     pub score: isize,
     pub best_move: PlayerMove,
@@ -125,11 +135,18 @@ impl Display for BoardEvaluation {
         Ok(())
     }
 }
+
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+pub struct Cache {
+    #[serde(with = "serde_json_any_key::any_key_map")]
+    transposition_table: HashMap<Game, Vec<BoardEvaluation>>,
+}
 enum AlphaBetaResult {
     Moves((isize, Vec<BoardEvaluation>)),
     Stopped,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn alpha_beta(
     game: &Game,
     depth: usize,
@@ -138,10 +155,29 @@ fn alpha_beta(
     player: Player,
     search_first: &[PlayerMove],
     deadline: Option<Instant>,
+    cache: &mut Cache,
 ) -> AlphaBetaResult {
     if deadline.is_some_and(|deadline| Instant::now() > deadline) {
         return AlphaBetaResult::Stopped;
     }
+    let search_first = match cache.transposition_table.get(game) {
+        Some(evaluations) => match evaluations.last() {
+            Some(eval) => {
+                if eval.depth >= depth {
+                    return AlphaBetaResult::Moves((eval.score, evaluations.clone()));
+                } else if search_first.len() <= evaluations.len() {
+                    &evaluations
+                        .iter()
+                        .map(|eval| eval.best_move.clone())
+                        .collect::<Vec<_>>()
+                } else {
+                    search_first
+                }
+            }
+            None => search_first,
+        },
+        None => search_first,
+    };
     let heuristic_board_score = heuristic_board_score(game);
     if depth == 0
         || heuristic_board_score == WHITE_LOSES_BLACK_WINS
@@ -183,6 +219,7 @@ fn alpha_beta(
                         &[]
                     },
                     deadline,
+                    cache,
                 ) {
                     AlphaBetaResult::Moves(moves) => moves,
                     AlphaBetaResult::Stopped => {
@@ -202,6 +239,15 @@ fn alpha_beta(
                     break;
                 }
                 alpha = isize::max(alpha, value);
+            }
+            if cache
+                .transposition_table
+                .get(game)
+                .is_none_or(|t| t.last().is_none_or(|t| t.depth < depth))
+            {
+                cache
+                    .transposition_table
+                    .insert(game.clone(), best_moves.clone());
             }
             AlphaBetaResult::Moves((value, best_moves))
         }
@@ -231,6 +277,7 @@ fn alpha_beta(
                         &[]
                     },
                     deadline,
+                    cache,
                 ) {
                     AlphaBetaResult::Moves(moves) => moves,
                     AlphaBetaResult::Stopped => {
@@ -250,6 +297,15 @@ fn alpha_beta(
                     break;
                 }
                 beta = isize::min(beta, value);
+            }
+            if cache
+                .transposition_table
+                .get(game)
+                .is_none_or(|t| t.last().is_none_or(|t| t.depth < depth))
+            {
+                cache
+                    .transposition_table
+                    .insert(game.clone(), best_moves.clone());
             }
             AlphaBetaResult::Moves((value, best_moves))
         }

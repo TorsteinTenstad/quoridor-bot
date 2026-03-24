@@ -1,5 +1,5 @@
 use crate::{
-    bot::{BoardEvaluation, best_move_alpha_beta, best_move_alpha_beta_iterative_deepening},
+    bot::{BoardEvaluation, Cache, best_move_alpha_beta, best_move_alpha_beta_iterative_deepening},
     data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
     game_logic::{execute_move_unchecked, is_move_legal},
     nn_bot::{self, QuoridorNet},
@@ -53,6 +53,14 @@ pub enum AuxCommand {
         #[arg(short, long, group = "source")]
         file: Option<PathBuf>,
     },
+    ExportCache {
+        #[arg()]
+        file: PathBuf,
+    },
+    ImportCache {
+        #[arg()]
+        file: PathBuf,
+    },
 }
 const AUX_COMMAND_NAME: &str = "";
 
@@ -72,6 +80,7 @@ pub struct Session {
     pub game_states: Vec<Game>,
     pub neural_networks: HashMap<Player, QuoridorNet>,
     pub moves: Vec<PlayerMove>,
+    pub cache: Cache,
 }
 impl Session {
     pub fn new(neural_networks: HashMap<Player, QuoridorNet>) -> Self {
@@ -79,6 +88,7 @@ impl Session {
             game_states: vec![Game::new()],
             neural_networks,
             moves: Vec::new(),
+            cache: Default::default(),
         }
     }
 }
@@ -101,6 +111,7 @@ pub fn execute_command(session: &mut Session, command: Command) {
                     player,
                     depth,
                     seconds.map(Duration::from_secs),
+                    &mut session.cache,
                 );
                 for eval in best_moves.iter().rev() {
                     println!("{eval}");
@@ -112,6 +123,7 @@ pub fn execute_command(session: &mut Session, command: Command) {
                     player,
                     depth,
                     seconds.map(Duration::from_secs),
+                    &mut session.cache,
                 );
                 let best_move = best_moves.last().unwrap();
                 println!("{} {:?}", best_move, duration);
@@ -157,6 +169,7 @@ pub fn execute_command(session: &mut Session, command: Command) {
                                 player,
                                 depth,
                                 seconds.map(Duration::from_secs),
+                                &mut session.cache,
                             );
                             println!("{}", best_moves.last().unwrap().score);
                         } else {
@@ -171,6 +184,7 @@ pub fn execute_command(session: &mut Session, command: Command) {
                         player,
                         depth,
                         seconds.map(Duration::from_secs),
+                        &mut session.cache,
                     );
                     println!(
                         "Best move evaluates to {}",
@@ -221,6 +235,25 @@ pub fn execute_command(session: &mut Session, command: Command) {
                     }
                 }
             }
+            AuxCommand::ExportCache { file: path } => match std::fs::File::create(path) {
+                Ok(file) => {
+                    serde_json::ser::to_writer_pretty(file, &session.cache).unwrap();
+                }
+                Err(e) => {
+                    println!("{:?}", e)
+                }
+            },
+            AuxCommand::ImportCache { file: path } => match std::fs::File::open(path) {
+                Ok(file) => match serde_json::de::from_reader::<_, Cache>(file) {
+                    Ok(cache) => session.cache = cache,
+                    Err(e) => {
+                        println!("{:?}", e)
+                    }
+                },
+                Err(e) => {
+                    println!("{:?}", e)
+                }
+            },
         },
     }
 }
@@ -318,13 +351,14 @@ fn get_bot_move(
     player: Player,
     depth: Option<usize>,
     duration: Option<Duration>,
+    cache: &mut Cache,
 ) -> (Duration, Vec<BoardEvaluation>) {
     let start_time = std::time::Instant::now();
     let best_moves = match (depth, duration) {
-        (Some(depth), _) => best_move_alpha_beta(game, player, depth),
+        (Some(depth), _) => best_move_alpha_beta(game, player, depth, cache),
         (_, duration) => {
             let duration = duration.unwrap_or(Duration::from_secs(3));
-            best_move_alpha_beta_iterative_deepening(game, player, duration)
+            best_move_alpha_beta_iterative_deepening(game, player, duration, cache)
         }
     };
     (start_time.elapsed(), best_moves)

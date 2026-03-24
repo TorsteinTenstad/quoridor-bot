@@ -8,7 +8,7 @@ pub const STARTING_WALLS: usize = 10;
 pub const TOTAL_WALLS: usize = 2 * STARTING_WALLS;
 pub const PLAYER_COUNT: usize = 2;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum WallOrientation {
     Horizontal,
     Vertical,
@@ -23,7 +23,18 @@ impl WallOrientation {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(
+    Default,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Ord,
+    PartialOrd,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct PiecePosition {
     pub index: usize,
 }
@@ -44,7 +55,7 @@ impl PiecePosition {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct WallPosition {
     pub x: usize,
     pub y: usize,
@@ -52,20 +63,22 @@ pub struct WallPosition {
 
 pub type Walls = [[Option<WallOrientation>; WALL_GRID_HEIGHT]; WALL_GRID_WIDTH];
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Board {
     pub walls: Walls,
     pub player_positions: [PiecePosition; PLAYER_COUNT],
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Game {
     pub player: Player,
     pub board: Board,
     pub walls_left: [usize; PLAYER_COUNT],
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter, serde::Serialize, serde::Deserialize,
+)]
 pub enum Direction {
     Up,
     Down,
@@ -73,13 +86,13 @@ pub enum Direction {
     Right,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct MovePiece {
     pub direction: Direction,
     pub direction_on_collision: Direction,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PlayerMove {
     PlaceWall {
         orientation: WallOrientation,
@@ -107,7 +120,9 @@ impl Display for PlayerMove {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Player {
     #[default]
     White = 0,
@@ -179,7 +194,7 @@ impl Direction {
             Direction::Right => 'r',
         }
     }
-    pub fn opposite(&self) ->Self{
+    pub fn opposite(&self) -> Self {
         match self {
             Direction::Up => Direction::Down,
             Direction::Down => Direction::Up,
@@ -205,6 +220,13 @@ impl Player {
         match self {
             Player::White => "White",
             Player::Black => "Black",
+        }
+    }
+
+    pub fn to_char(self) -> char {
+        match self {
+            Player::White => 'w',
+            Player::Black => 'b',
         }
     }
 }
