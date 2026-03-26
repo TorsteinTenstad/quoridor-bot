@@ -129,18 +129,17 @@ pub fn room_for_wall_placement(
     x: isize,
     y: isize,
 ) -> bool {
-    let (offsets_to_check, other_orientation) = match orientation {
-        WallOrientation::Horizontal => ([(-1, 0), (0, 0), (1, 0)], WallOrientation::Vertical),
-        WallOrientation::Vertical => ([(0, -1), (0, 0), (0, 1)], WallOrientation::Horizontal),
-    };
-    offsets_to_check
-        .iter()
-        .all(|(dx, dy)| !board.wall_at(orientation, x + dx, y + dy))
-        && !board.wall_at(other_orientation, x, y)
-        && x >= 0
+    x >= 0
         && y >= 0
         && x < WALL_GRID_WIDTH as isize
         && y < WALL_GRID_HEIGHT as isize
+        && board.walls[x as usize][y as usize].is_none()
+        && match orientation {
+            WallOrientation::Horizontal => [(-1, 0), (1, 0)],
+            WallOrientation::Vertical => [(0, -1), (0, 1)],
+        }
+        .iter()
+        .all(|(dx, dy)| !board.wall_at(orientation, x + dx, y + dy))
 }
 
 pub fn is_move_legal_with_player_at_position(
@@ -208,4 +207,46 @@ pub fn new_position_after_move_piece_unchecked(
     } else {
         new_position
     }
+}
+
+pub fn all_move_piece_moves(
+    player_position: &PiecePosition,
+    opponent_position: &PiecePosition,
+) -> impl Iterator<Item = MovePiece> {
+    let x_diff = opponent_position.x() as isize - player_position.x() as isize;
+    let y_diff = opponent_position.y() as isize - player_position.y() as isize;
+    let jump_direction = match (x_diff, y_diff) {
+        (0, 1) => Some(Direction::Down),
+        (0, -1) => Some(Direction::Up),
+        (1, 0) => Some(Direction::Right),
+        (-1, 0) => Some(Direction::Left),
+        _ => None,
+    };
+    let jump_moves = jump_direction.map(|j| {
+        Direction::iter()
+            .filter(move |&d| d != j.opposite())
+            .map(move |d| MovePiece {
+                direction: j,
+                direction_on_collision: d,
+            })
+    });
+    let non_jump_moves = jump_direction.map(|j| {
+        Direction::iter()
+            .filter(move |&d| d != j)
+            .map(|d| MovePiece {
+                direction: d,
+                direction_on_collision: d,
+            })
+    });
+    let regular_moves = jump_direction
+        .is_none()
+        .then_some(Direction::iter().map(|d| MovePiece {
+            direction: d,
+            direction_on_collision: d,
+        }));
+
+    std::iter::empty()
+        .chain(jump_moves.into_iter().flatten())
+        .chain(non_jump_moves.into_iter().flatten())
+        .chain(regular_moves.into_iter().flatten())
 }

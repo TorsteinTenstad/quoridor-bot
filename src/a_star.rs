@@ -1,6 +1,7 @@
-use crate::data_model::{Board, MovePiece, PIECE_GRID_HEIGHT, PiecePosition, Player};
+use crate::data_model::{Board, PIECE_GRID_HEIGHT, PiecePosition, Player};
 use crate::game_logic::{
-    is_move_piece_legal_with_player_at_position, new_position_after_move_piece_unchecked,
+    all_move_piece_moves, is_move_piece_legal_with_player_at_position,
+    new_position_after_move_piece_unchecked,
 };
 use crate::priority_queue::PriorityQueue;
 use std::collections::HashMap;
@@ -57,19 +58,19 @@ fn reconstruct_path(
     total_path
 }
 
-fn neighbors(board: &Board, player: Player, player_position: &PiecePosition) -> Vec<PiecePosition> {
-    MovePiece::iter()
-        .filter_map(|move_piece| {
-            is_move_piece_legal_with_player_at_position(board, player, player_position, &move_piece)
-                .then(|| {
-                    new_position_after_move_piece_unchecked(
-                        player_position,
-                        &move_piece,
-                        board.player_position(player.opponent()),
-                    )
-                })
+fn neighbors(
+    board: &Board,
+    player: Player,
+    player_position: &PiecePosition,
+) -> impl Iterator<Item = PiecePosition> {
+    let opponent_position = board.player_position(player.opponent());
+    all_move_piece_moves(player_position, opponent_position)
+        .filter(move |move_piece| {
+            is_move_piece_legal_with_player_at_position(board, player, player_position, move_piece)
         })
-        .collect()
+        .map(|move_piece| {
+            new_position_after_move_piece_unchecked(player_position, &move_piece, opponent_position)
+        })
 }
 
 #[cfg(test)]

@@ -2,11 +2,11 @@ use crate::{
     a_star::a_star,
     a_star_to_opponent::a_star_to_opponent,
     data_model::{
-        Direction, Game, MovePiece, PIECE_GRID_HEIGHT, Player, PlayerMove, TOTAL_WALLS,
-        WALL_GRID_HEIGHT, WALL_GRID_WIDTH, WallOrientation, WallPosition,
+        Game, PIECE_GRID_HEIGHT, Player, PlayerMove, TOTAL_WALLS, WALL_GRID_HEIGHT,
+        WALL_GRID_WIDTH, WallOrientation, WallPosition,
     },
     game_logic::{
-        execute_move_unchecked, is_move_piece_legal_with_player_at_position,
+        all_move_piece_moves, execute_move_unchecked, is_move_piece_legal_with_player_at_position,
         room_for_wall_placement,
     },
     render_board,
@@ -313,46 +313,20 @@ fn alpha_beta(
 }
 
 fn moves_ordered_by_heuristic_quality(game: &Game, player: Player) -> Vec<PlayerMove> {
-    let mut moves: Vec<PlayerMove> = Default::default();
     let player_position = game.board.player_position(player);
     let opponent_position = game.board.player_position(player.opponent());
-    let x_diff = opponent_position.x() as isize - player_position.x() as isize;
-    let y_diff = opponent_position.y() as isize - player_position.y() as isize;
 
-    let push_if_move_piece_is_legal =
-        |moves: &mut Vec<PlayerMove>, direction: Direction, direction_on_collision: Direction| {
-            let move_piece = MovePiece {
-                direction,
-                direction_on_collision,
-            };
-            if is_move_piece_legal_with_player_at_position(
+    let mut moves: Vec<PlayerMove> = all_move_piece_moves(player_position, opponent_position)
+        .filter(move |move_piece| {
+            is_move_piece_legal_with_player_at_position(
                 &game.board,
                 player,
                 player_position,
-                &move_piece,
-            ) {
-                moves.push(PlayerMove::MovePiece(move_piece));
-            }
-        };
-
-    if let Some(jump_direction) = match (x_diff, y_diff) {
-        (0, 1) => Some(Direction::Down),
-        (0, -1) => Some(Direction::Up),
-        (1, 0) => Some(Direction::Right),
-        (-1, 0) => Some(Direction::Left),
-        _ => None,
-    } {
-        for direction in Direction::iter().filter(|&d| d != jump_direction.opposite()) {
-            push_if_move_piece_is_legal(&mut moves, jump_direction, direction);
-        }
-        for direction in Direction::iter().filter(|&d| d != jump_direction) {
-            push_if_move_piece_is_legal(&mut moves, direction, direction);
-        }
-    } else {
-        for direction in Direction::iter() {
-            push_if_move_piece_is_legal(&mut moves, direction, direction);
-        }
-    }
+                move_piece,
+            )
+        })
+        .map(PlayerMove::MovePiece)
+        .collect();
     if game.walls_left[player.as_index()] > 0 {
         let origin = opponent_position;
         for i in 1.. {
