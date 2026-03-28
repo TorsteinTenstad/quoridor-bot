@@ -5,8 +5,7 @@ use ggez::{
     {Context, ContextBuilder, GameResult},
 };
 use lib::{
-    agent::PlayerType,
-    agent::nn_bot::QuoridorNet,
+    agent::{Agent, AgentArg, AgentType, InputType, nn_bot::QuoridorNet},
     commands::{self, Command, Session, execute_command, get_legal_command},
     data_model::{Game, Player},
     draw,
@@ -27,11 +26,11 @@ struct Args {
     #[clap(short, long, default_value_t = 0.0)]
     temperature: f32,
 
-    #[clap(short='a', long, default_value_t = PlayerType::Human)]
-    player_a: PlayerType,
+    #[clap(short='w', long, default_value_t = AgentArg::Manual)]
+    player_white: AgentArg,
 
-    #[clap(short='b', long, default_value_t = PlayerType::Bot)]
-    player_b: PlayerType,
+    #[clap(short='b', long, default_value_t = AgentArg::Bot)]
+    player_black: AgentArg,
 
     #[clap(short, long)]
     end_after_moves: Option<usize>,
@@ -46,14 +45,10 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
+    // TODO: only needed when white/black is neural network
     let mut neural_networks: HashMap<Player, QuoridorNet> = HashMap::new();
-
-    if args.player_a == PlayerType::NeuralNet {
-        neural_networks.insert(Player::White, QuoridorNet::new());
-    }
-    if args.player_b == PlayerType::NeuralNet {
-        neural_networks.insert(Player::Black, QuoridorNet::new());
-    }
+    neural_networks.insert(Player::White, QuoridorNet::new());
+    neural_networks.insert(Player::Black, QuoridorNet::new());
 
     let (ctx, event_loop) = ContextBuilder::new("quoridor-bot", "Torstein Tenstad")
         .window_mode(
@@ -70,30 +65,38 @@ fn main() {
     };
 
     std::thread::spawn(move || {
-        let player_type = |p: Player| match p {
-            Player::White => args.player_a,
-            Player::Black => args.player_b,
-        };
+        let mut agent_white = InputType::from(args.player_white);
+        let mut agent_black = InputType::from(args.player_black);
+
         let mut session = Session::new(neural_networks);
         loop {
             let current_game_state = session.game_states.last().unwrap();
             let player = current_game_state.player;
+            let agent = match player {
+                Player::White => &mut agent_white,
+                Player::Black => &mut agent_black,
+            };
             println!(
                 "{} ({}) to move. Walls: White: {}, Black: {}",
                 player.to_string(),
-                player_type(player),
+                agent,
                 current_game_state.walls_left[Player::White.as_index()],
                 current_game_state.walls_left[Player::Black.as_index()]
             );
-            let command = match player_type(player) {
-                PlayerType::Human => get_legal_command(current_game_state, player),
-                PlayerType::NeuralNet => Command::AuxCommand(commands::AuxCommand::PlayNNMove {
-                    temperature: args.temperature,
-                }),
-                PlayerType::Bot => Command::AuxCommand(commands::AuxCommand::PlayBotMove {
-                    depth: args.depth,
-                    seconds: args.seconds,
-                }),
+            let command = match agent {
+                InputType::Manual => get_legal_command(current_game_state, player),
+                InputType::Automatic(agent) => match agent {
+                    AgentType::NeuralNet => Command::AuxCommand(commands::AuxCommand::PlayNNMove {
+                        temperature: args.temperature,
+                    }),
+                    AgentType::Bot => Command::AuxCommand(commands::AuxCommand::PlayBotMove {
+                        depth: args.depth,
+                        seconds: args.seconds,
+                    }),
+                    AgentType::Random(agent) => {
+                        Command::PlayMove(agent.get_move(current_game_state))
+                    }
+                },
             };
             execute_command(&mut session, command);
             tx.send(session.game_states.last().unwrap().clone())

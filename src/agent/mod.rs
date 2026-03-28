@@ -1,21 +1,63 @@
 pub mod bot;
 pub mod nn_bot;
+pub mod random;
 
 use std::fmt::Display;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap_derive::ValueEnum)]
-pub enum PlayerType {
-    Human,
-    Bot,
-    NeuralNet,
+use crate::data_model::{Game, PlayerMove};
+
+pub trait Agent {
+    fn get_move(&mut self, game: &Game) -> PlayerMove;
+    fn name(&self) -> &str {
+        "agent"
+    }
 }
 
-impl Display for PlayerType {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap_derive::ValueEnum)]
+pub enum AgentArg {
+    Bot,
+    Manual,
+    NeuralNet,
+    Random,
+}
+
+impl Display for AgentArg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        InputType::from(self.clone()).fmt(f)
+    }
+}
+
+pub enum InputType {
+    Manual,
+    Automatic(AgentType),
+}
+
+pub enum AgentType {
+    Bot,
+    NeuralNet,
+    Random(random::Random),
+}
+
+impl Display for InputType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PlayerType::Human => write!(f, "human"),
-            PlayerType::Bot => write!(f, "bot"),
-            PlayerType::NeuralNet => write!(f, "neural network"),
+            InputType::Manual => write!(f, "manual"),
+            InputType::Automatic(agent) => match agent {
+                AgentType::Bot => write!(f, "bot"),
+                AgentType::NeuralNet => write!(f, "neural network"),
+                AgentType::Random(agent) => write!(f, "{}", agent.name()),
+            },
+        }
+    }
+}
+
+impl From<AgentArg> for InputType {
+    fn from(value: AgentArg) -> InputType {
+        match value {
+            AgentArg::Manual => InputType::Manual,
+            AgentArg::Bot => InputType::Automatic(AgentType::Bot),
+            AgentArg::NeuralNet => InputType::Automatic(AgentType::NeuralNet),
+            AgentArg::Random => InputType::Automatic(AgentType::Random(random::Random)),
         }
     }
 }
