@@ -35,23 +35,15 @@ impl WallOrientation {
     serde::Serialize,
     serde::Deserialize,
 )]
+
 pub struct PiecePosition {
-    pub index: usize,
+    pub x: usize,
+    pub y: usize,
 }
 
 impl PiecePosition {
     pub fn new(x: usize, y: usize) -> Self {
-        Self {
-            index: y * PIECE_GRID_WIDTH + x,
-        }
-    }
-
-    pub fn x(&self) -> usize {
-        self.index % PIECE_GRID_WIDTH
-    }
-
-    pub fn y(&self) -> usize {
-        self.index / PIECE_GRID_WIDTH
+        Self { x: x, y: y }
     }
 }
 

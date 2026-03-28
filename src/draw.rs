@@ -57,9 +57,9 @@ pub fn draw(game: &Game, ctx: &mut Context) -> GameResult {
     }
     for (i, piece_position) in game.board.player_positions.iter().enumerate() {
         let point = [
-            piece_position.x() as f32 * (piece_square_size + wall_thickness)
+            piece_position.x as f32 * (piece_square_size + wall_thickness)
                 + piece_square_size / 2.0,
-            piece_position.y() as f32 * (piece_square_size + wall_thickness)
+            piece_position.y as f32 * (piece_square_size + wall_thickness)
                 + piece_square_size / 2.0,
         ];
         let color = if i == Player::White.as_index() {

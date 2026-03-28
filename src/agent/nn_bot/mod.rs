@@ -97,7 +97,7 @@ fn encode(game: &Game) -> EncodedState {
     // player pawns
     for p in [Player::White, Player::Black] {
         let pos = game.board.player_position(p);
-        channels[p.as_index()][pos.y()][pos.x()] = 1.0;
+        channels[p.as_index()][pos.y][pos.x] = 1.0;
     }
 
     // walls (just fill in as 1.0 where a wall is placed)

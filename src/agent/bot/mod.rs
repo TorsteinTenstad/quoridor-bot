@@ -54,8 +54,8 @@ pub fn heuristic_board_score(game: &Game) -> isize {
         .map(|v| v.len())
         .unwrap_or(usize::MAX);
 
-    let side = (game.board.player_position(Player::White).y() as f32
-        + game.board.player_position(Player::Black).y() as f32)
+    let side = (game.board.player_position(Player::White).y as f32
+        + game.board.player_position(Player::Black).y as f32)
         / (PIECE_GRID_HEIGHT - 1) as f32
         - 1.0;
 
@@ -328,8 +328,8 @@ fn moves_ordered_by_heuristic_quality(game: &Game, player: Player) -> Vec<Player
     if game.walls_left[player.as_index()] > 0 {
         let origin = opponent_position;
         for i in 1.. {
-            let top_left_x = origin.x() as isize - i as isize;
-            let top_left_y = origin.y() as isize - i as isize;
+            let top_left_x = origin.x as isize - i as isize;
+            let top_left_y = origin.y as isize - i as isize;
             let side_length = 2 * i;
             let mut some_in_bounds = false;
             for (x, y) in SquareOutlineIterator::new(top_left_x, top_left_y, side_length) {

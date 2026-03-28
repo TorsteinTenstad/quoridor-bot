@@ -6,8 +6,8 @@ use crate::priority_queue::PriorityQueue;
 use std::collections::HashMap;
 
 pub fn heuristic(pos: &PiecePosition, opponent_pos: &PiecePosition) -> usize {
-    let dx = usize::abs_diff(pos.x(), opponent_pos.x());
-    let dy = usize::abs_diff(pos.y(), opponent_pos.y());
+    let dx = usize::abs_diff(pos.x, opponent_pos.x);
+    let dy = usize::abs_diff(pos.y, opponent_pos.y);
     dx + dy
 }
 

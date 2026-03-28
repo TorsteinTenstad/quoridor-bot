@@ -77,55 +77,55 @@ pub fn is_move_direction_legal_with_player_at_position(
 ) -> bool {
     match direction {
         Direction::Up => {
-            player_position.y() > 0
+            player_position.y > 0
                 && !board.wall_at(
                     WallOrientation::Horizontal,
-                    player_position.x() as isize - 1,
-                    player_position.y() as isize - 1,
+                    player_position.x as isize - 1,
+                    player_position.y as isize - 1,
                 )
                 && !board.wall_at(
                     WallOrientation::Horizontal,
-                    player_position.x() as isize,
-                    player_position.y() as isize - 1,
+                    player_position.x as isize,
+                    player_position.y as isize - 1,
                 )
         }
         Direction::Down => {
-            player_position.y() < PIECE_GRID_HEIGHT - 1
+            player_position.y < PIECE_GRID_HEIGHT - 1
                 && !board.wall_at(
                     WallOrientation::Horizontal,
-                    player_position.x() as isize - 1,
-                    player_position.y() as isize,
+                    player_position.x as isize - 1,
+                    player_position.y as isize,
                 )
                 && !board.wall_at(
                     WallOrientation::Horizontal,
-                    player_position.x() as isize,
-                    player_position.y() as isize,
+                    player_position.x as isize,
+                    player_position.y as isize,
                 )
         }
         Direction::Left => {
-            player_position.x() > 0
+            player_position.x > 0
                 && !board.wall_at(
                     WallOrientation::Vertical,
-                    player_position.x() as isize - 1,
-                    player_position.y() as isize,
+                    player_position.x as isize - 1,
+                    player_position.y as isize,
                 )
                 && !board.wall_at(
                     WallOrientation::Vertical,
-                    player_position.x() as isize - 1,
-                    player_position.y() as isize - 1,
+                    player_position.x as isize - 1,
+                    player_position.y as isize - 1,
                 )
         }
         Direction::Right => {
-            player_position.x() < PIECE_GRID_HEIGHT - 1
+            player_position.x < PIECE_GRID_HEIGHT - 1
                 && !board.wall_at(
                     WallOrientation::Vertical,
-                    player_position.x() as isize,
-                    player_position.y() as isize,
+                    player_position.x as isize,
+                    player_position.y as isize,
                 )
                 && !board.wall_at(
                     WallOrientation::Vertical,
-                    player_position.x() as isize,
-                    player_position.y() as isize - 1,
+                    player_position.x as isize,
+                    player_position.y as isize - 1,
                 )
         }
     }
@@ -196,8 +196,8 @@ pub fn new_position_after_direction_unchecked(
 ) -> PiecePosition {
     let (dx, dy) = direction.to_offset();
     PiecePosition::new(
-        (player_position.x() as isize + dx) as usize,
-        (player_position.y() as isize + dy) as usize,
+        (player_position.x as isize + dx) as usize,
+        (player_position.y as isize + dy) as usize,
     )
 }
 
@@ -219,8 +219,8 @@ pub fn all_move_piece_moves(
     player_position: &PiecePosition,
     opponent_position: &PiecePosition,
 ) -> impl Iterator<Item = MovePiece> {
-    let x_diff = opponent_position.x() as isize - player_position.x() as isize;
-    let y_diff = opponent_position.y() as isize - player_position.y() as isize;
+    let x_diff = opponent_position.x as isize - player_position.x as isize;
+    let y_diff = opponent_position.y as isize - player_position.y as isize;
     let jump_direction = match (x_diff, y_diff) {
         (0, 1) => Some(Direction::Down),
         (0, -1) => Some(Direction::Up),

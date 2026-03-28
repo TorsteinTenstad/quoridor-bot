@@ -8,8 +8,8 @@ use std::collections::HashMap;
 
 pub fn heuristic(pos: &PiecePosition, player: Player) -> usize {
     match player {
-        Player::White => PIECE_GRID_HEIGHT - 1 - pos.y(),
-        Player::Black => pos.y(),
+        Player::White => PIECE_GRID_HEIGHT - 1 - pos.y,
+        Player::Black => pos.y,
     }
 }
 
