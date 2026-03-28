@@ -91,17 +91,20 @@ impl Session {
             cache: Default::default(),
         }
     }
+
+    pub fn push(&mut self, game_state: Game, m: PlayerMove) {
+        self.game_states.push(game_state);
+        self.moves.push(m);
+    }
 }
 
 pub fn execute_command(session: &mut Session, command: Command) {
     let current_game_state = session.game_states.last().unwrap();
     let player = current_game_state.player;
     match command {
-        Command::PlayMove(player_move) => {
-            let mut next_game_state = current_game_state.clone();
-            execute_move_unchecked(&mut next_game_state, player, &player_move);
-            session.game_states.push(next_game_state);
-            session.moves.push(player_move);
+        Command::PlayMove(m) => {
+            let next_game_state = execute_move_unchecked(&current_game_state, &m);
+            session.push(next_game_state, m);
         }
         Command::AuxCommand(aux_command) => match aux_command {
             AuxCommand::Reset => *session = Session::new(HashMap::new()),
@@ -125,25 +128,22 @@ pub fn execute_command(session: &mut Session, command: Command) {
                     seconds.map(Duration::from_secs),
                     &mut session.cache,
                 );
-                let best_move = best_moves.last().unwrap();
-                println!("{} {:?}", best_move, duration);
-                let mut next_game_state = current_game_state.clone();
-                let player_move = &best_move.best_move;
-                execute_move_unchecked(&mut next_game_state, player, player_move);
-                session.game_states.push(next_game_state);
-                session.moves.push(player_move.clone());
+                let m = best_moves.into_iter().last().unwrap().best_move;
+                println!("{} {:?}", m, duration);
+
+                let next_game_state = execute_move_unchecked(&current_game_state, &m);
+                session.push(next_game_state, m);
             }
             AuxCommand::PlayNNMove { temperature } => {
-                let nn_move = nn_bot::get_move(
+                let m = nn_bot::get_move(
                     current_game_state,
                     session.neural_networks.get(&player).unwrap(),
                     player,
                     temperature,
                 );
 
-                let mut next_game_state = current_game_state.clone();
-                execute_move_unchecked(&mut next_game_state, player, &nn_move);
-                session.game_states.push(next_game_state);
+                let next_game_state = execute_move_unchecked(&current_game_state, &m);
+                session.push(next_game_state, m);
             }
             AuxCommand::Undo { moves } => {
                 for _ in 0..moves {
@@ -160,12 +160,11 @@ pub fn execute_command(session: &mut Session, command: Command) {
                 seconds,
             } => {
                 if let Some(move_str) = move_to_evaluate {
-                    if let Some(player_move) = parse_player_move(&move_str) {
-                        if is_move_legal(current_game_state, player, &player_move) {
-                            let mut child_game_state = current_game_state.clone();
-                            execute_move_unchecked(&mut child_game_state, player, &player_move);
+                    if let Some(m) = parse_player_move(&move_str) {
+                        if is_move_legal(current_game_state, player, &m) {
+                            let next_game_state = execute_move_unchecked(current_game_state, &m);
                             let (_, best_moves) = get_bot_move(
-                                &child_game_state,
+                                &next_game_state,
                                 player,
                                 depth,
                                 seconds.map(Duration::from_secs),
@@ -226,12 +225,10 @@ pub fn execute_command(session: &mut Session, command: Command) {
                     .collect::<Option<Vec<_>>>()
                 {
                     *session = Session::new(HashMap::new());
-                    for player_move in moves {
-                        let mut next_game_state = session.game_states.last().unwrap().clone();
-                        let player = next_game_state.player;
-                        execute_move_unchecked(&mut next_game_state, player, &player_move);
-                        session.game_states.push(next_game_state);
-                        session.moves.push(player_move);
+                    for m in moves {
+                        let current_game_state = session.game_states.last().unwrap();
+                        let next_game_state = execute_move_unchecked(current_game_state, &m);
+                        session.push(next_game_state, m);
                     }
                 }
             }

@@ -6,7 +6,15 @@ use crate::{
     },
 };
 
-pub fn execute_move_unchecked(game: &mut Game, player: Player, player_move: &PlayerMove) {
+pub fn execute_move_unchecked(game: &Game, m: &PlayerMove) -> Game {
+    let mut next = game.clone();
+    execute_move_unchecked_inplace(&mut next, m);
+    next
+}
+
+fn execute_move_unchecked_inplace(game: &mut Game, player_move: &PlayerMove) {
+    let player = game.player;
+
     match player_move {
         PlayerMove::PlaceWall {
             orientation,
@@ -160,16 +168,14 @@ pub fn is_move_legal_with_player_at_position(
             position,
         } => {
             let blocks_path = |player_to_block_check: Player| {
-                let mut game_copy = game.clone();
-                execute_move_unchecked(
-                    &mut game_copy,
-                    player,
+                let next_game_state = execute_move_unchecked(
+                    &game,
                     &PlayerMove::PlaceWall {
                         orientation: *orientation,
                         position: position.clone(),
                     },
                 );
-                a_star(&game_copy.board, player_to_block_check).is_none()
+                a_star(&next_game_state.board, player_to_block_check).is_none()
             };
             game.walls_left[player.as_index()] > 0
                 && room_for_wall_placement(

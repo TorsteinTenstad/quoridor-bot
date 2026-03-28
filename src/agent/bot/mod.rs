@@ -200,8 +200,7 @@ fn alpha_beta(
                 .into_iter()
                 .chain(moves_ordered_by_heuristic_quality(game, player))
             {
-                let mut child_game_state = game.clone();
-                execute_move_unchecked(&mut child_game_state, player, &player_move);
+                let child_game_state = execute_move_unchecked(&game, &player_move);
                 if a_star(&child_game_state.board, player).is_none()
                     || a_star(&child_game_state.board, player.opponent()).is_none()
                 {
@@ -258,8 +257,7 @@ fn alpha_beta(
                 .into_iter()
                 .chain(moves_ordered_by_heuristic_quality(game, player))
             {
-                let mut child_game_state = game.clone();
-                execute_move_unchecked(&mut child_game_state, player, &player_move);
+                let child_game_state = execute_move_unchecked(&game, &player_move);
                 if a_star(&child_game_state.board, player).is_none()
                     || a_star(&child_game_state.board, player.opponent()).is_none()
                 {
