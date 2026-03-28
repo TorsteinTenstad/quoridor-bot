@@ -6,13 +6,21 @@ use std::fmt::Display;
 
 use clap::ValueEnum;
 
-use crate::data_model::{Game, PlayerMove};
+use crate::{
+    commands::Session,
+    data_model::{Game, PlayerMove},
+};
 
 pub trait Agent {
+    type Command;
+
     fn get_move(&mut self, game: &Game) -> PlayerMove;
+
     fn name(&self) -> &str {
         "agent"
     }
+
+    fn execute(&mut self, _session: &mut Session, _cmd: Self::Command) {}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap_derive::ValueEnum)]

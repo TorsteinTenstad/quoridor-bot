@@ -1,6 +1,10 @@
 use crate::{
-    agent::bot::{Cache, get_bot_move},
-    agent::nn_bot::{self, QuoridorNet},
+    agent::{
+        Agent,
+        bot::{Cache, get_bot_move},
+        nn_bot::{self, QuoridorNet},
+        random::{self, RandomCommand},
+    },
     data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
     game_logic::{execute_move_unchecked, is_move_legal},
 };
@@ -9,6 +13,7 @@ use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 #[derive(clap_derive::Subcommand, Debug)]
 pub enum AuxCommand {
+    Bot(BotSubCommand),
     Reset,
     BotMove {
         #[arg(short, long, group = "time_control")]
@@ -65,6 +70,17 @@ pub enum AuxCommand {
 const AUX_COMMAND_NAME: &str = "";
 
 #[derive(clap_derive::Parser, Debug)]
+pub struct BotSubCommand {
+    #[command(subcommand)]
+    pub cmd: BotCommand,
+}
+
+#[derive(clap_derive::Subcommand, Debug)]
+pub enum BotCommand {
+    Random(RandomCommand),
+}
+
+#[derive(clap_derive::Parser, Debug)]
 #[command(name = AUX_COMMAND_NAME)]
 struct AuxCommandParserHelper {
     #[command(subcommand)]
@@ -107,6 +123,9 @@ pub fn execute_command(session: &mut Session, command: Command) {
             session.push(next_game_state, m);
         }
         Command::AuxCommand(aux_command) => match aux_command {
+            AuxCommand::Bot(bot_command) => match bot_command.cmd {
+                BotCommand::Random(cmd) => random::Random.execute(session, cmd.cmd),
+            },
             AuxCommand::Reset => *session = Session::new(HashMap::new()),
             AuxCommand::BotMove { depth, seconds } => {
                 let (_, best_moves) = get_bot_move(
