@@ -1,9 +1,9 @@
 use clap::Parser;
 use lib::{
+    agent::PlayerType,
+    agent::nn_bot::QuoridorNet,
     commands::{self, Command, Session, execute_command, get_legal_command},
     data_model::Player,
-    nn_bot::QuoridorNet,
-    player_type::PlayerType,
     render_board,
 };
 use std::collections::HashMap;

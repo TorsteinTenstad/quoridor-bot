@@ -1,10 +1,13 @@
+pub mod bot;
+pub mod nn_bot;
+
 use std::fmt::Display;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap_derive::ValueEnum)]
 pub enum PlayerType {
     Human,
     Bot,
-    NeuralNet
+    NeuralNet,
 }
 
 impl Display for PlayerType {
@@ -12,7 +15,7 @@ impl Display for PlayerType {
         match self {
             PlayerType::Human => write!(f, "human"),
             PlayerType::Bot => write!(f, "bot"),
-            PlayerType::NeuralNet => write!(f, "neural network")
+            PlayerType::NeuralNet => write!(f, "neural network"),
         }
     }
 }

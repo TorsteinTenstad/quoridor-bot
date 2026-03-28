@@ -5,11 +5,11 @@ use ggez::{
     {Context, ContextBuilder, GameResult},
 };
 use lib::{
+    agent::PlayerType,
+    agent::nn_bot::QuoridorNet,
     commands::{self, Command, Session, execute_command, get_legal_command},
     data_model::{Game, Player},
     draw,
-    nn_bot::QuoridorNet,
-    player_type::PlayerType,
 };
 use std::{
     collections::HashMap,

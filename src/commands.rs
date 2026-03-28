@@ -1,8 +1,8 @@
 use crate::{
-    bot::{BoardEvaluation, Cache, best_move_alpha_beta, best_move_alpha_beta_iterative_deepening},
+    agent::bot::{Cache, get_bot_move},
+    agent::nn_bot::{self, QuoridorNet},
     data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
     game_logic::{execute_move_unchecked, is_move_legal},
-    nn_bot::{self, QuoridorNet},
 };
 use clap::Parser;
 use std::{collections::HashMap, path::PathBuf, time::Duration};
@@ -344,22 +344,4 @@ pub fn parse_player_move(input: &str) -> Option<PlayerMove> {
         },
         _ => None,
     }
-}
-
-fn get_bot_move(
-    game: &Game,
-    player: Player,
-    depth: Option<usize>,
-    duration: Option<Duration>,
-    cache: &mut Cache,
-) -> (Duration, Vec<BoardEvaluation>) {
-    let start_time = std::time::Instant::now();
-    let best_moves = match (depth, duration) {
-        (Some(depth), _) => best_move_alpha_beta(game, player, depth, cache),
-        (_, duration) => {
-            let duration = duration.unwrap_or(Duration::from_secs(3));
-            best_move_alpha_beta_iterative_deepening(game, player, duration, cache)
-        }
-    };
-    (start_time.elapsed(), best_moves)
 }

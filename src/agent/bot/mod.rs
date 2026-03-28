@@ -363,3 +363,21 @@ fn moves_ordered_by_heuristic_quality(game: &Game, player: Player) -> Vec<Player
     }
     moves
 }
+
+pub fn get_bot_move(
+    game: &Game,
+    player: Player,
+    depth: Option<usize>,
+    duration: Option<Duration>,
+    cache: &mut Cache,
+) -> (Duration, Vec<BoardEvaluation>) {
+    let start_time = std::time::Instant::now();
+    let best_moves = match (depth, duration) {
+        (Some(depth), _) => best_move_alpha_beta(game, player, depth, cache),
+        (_, duration) => {
+            let duration = duration.unwrap_or(Duration::from_secs(3));
+            best_move_alpha_beta_iterative_deepening(game, player, duration, cache)
+        }
+    };
+    (start_time.elapsed(), best_moves)
+}

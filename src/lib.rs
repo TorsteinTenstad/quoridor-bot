@@ -1,13 +1,11 @@
 pub mod a_star;
 pub mod a_star_to_opponent;
+pub mod agent;
 pub mod all_moves;
-pub mod bot;
 pub mod commands;
 pub mod data_model;
 pub mod draw;
 pub mod game_logic;
-pub mod nn_bot;
-pub mod player_type;
 pub mod priority_queue;
 pub mod render_board;
 pub mod square_outline_iterator;
