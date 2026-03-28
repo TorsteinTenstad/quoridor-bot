@@ -4,6 +4,8 @@ pub mod random;
 
 use std::fmt::Display;
 
+use clap::ValueEnum;
+
 use crate::data_model::{Game, PlayerMove};
 
 pub trait Agent {
@@ -23,7 +25,11 @@ pub enum AgentArg {
 
 impl Display for AgentArg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        InputType::from(self.clone()).fmt(f)
+        f.write_str(
+            self.to_possible_value()
+                .expect("clap ValueEnum unable to find its own name")
+                .get_name(),
+        )
     }
 }
 
