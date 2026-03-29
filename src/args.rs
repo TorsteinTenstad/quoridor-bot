@@ -17,6 +17,6 @@ pub struct Args {
     #[clap(short = 'b', long)]
     pub player_black: Option<BotType>,
 
-    #[clap(short, long, default_value_t = 1000)]
+    #[clap(long, default_value_t = 1000)]
     pub window_size: usize,
 }

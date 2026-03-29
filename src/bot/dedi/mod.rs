@@ -1,17 +1,17 @@
 mod walls;
 
 use crate::{
-    bot::Bot,
-    session::Session,
+    bot::{Bot, dedi::walls::get_move},
     data_model::{Direction, Game, MovePiece, PlayerMove},
+    session::Session,
 };
 
 #[derive(Default)]
 pub struct Dedi {}
 
 impl Bot for Dedi {
-    type Command = SubCommand;
-    
+    type Command = DediCommand;
+
     fn get_move(&mut self, _: &Game) -> PlayerMove {
         PlayerMove::MovePiece({
             MovePiece {
@@ -21,8 +21,14 @@ impl Bot for Dedi {
         })
     }
 
-    fn execute(&mut self, _: &mut Session, _: Self::Command) {}
+    fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
+        match cmd {
+            DediCommand::Walls => get_move(&session.game),
+        }
+    }
 }
 
 #[derive(clap_derive::Subcommand, Debug)]
-pub enum SubCommand {}
+pub enum DediCommand {
+    Walls,
+}

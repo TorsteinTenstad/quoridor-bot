@@ -23,6 +23,7 @@ pub enum BotType {
     Carlo,
     NeuralNet,
     Random,
+    Dedi,
 }
 
 #[derive(Default)]
@@ -31,6 +32,7 @@ pub struct Bots {
     carlo: carlo::Carlo,
     neural_net: neural_net::NeuralNet,
     random: random::Random,
+    dedi: dedi::Dedi,
 }
 
 #[derive(clap_derive::Subcommand, Debug)]
@@ -43,6 +45,8 @@ pub enum BotCommand {
     NeuralNet(neural_net::NeuralNetCommand),
     #[command(subcommand)]
     Random(random::RandomCommand),
+    #[command(subcommand)]
+    Dedi(dedi::DediCommand),
 }
 
 impl Bots {
@@ -52,6 +56,7 @@ impl Bots {
             BotType::Carlo => self.carlo.get_move(game),
             BotType::NeuralNet => self.neural_net.get_move(game),
             BotType::Random => self.random.get_move(game),
+            BotType::Dedi => self.dedi.get_move(game),
         }
     }
 
@@ -61,6 +66,7 @@ impl Bots {
             BotCommand::Random(cmd) => self.random.execute(session, cmd),
             BotCommand::NeuralNet(cmd) => self.neural_net.execute(session, cmd),
             BotCommand::Abe(cmd) => self.abe.execute(session, cmd),
+            BotCommand::Dedi(cmd) => self.dedi.execute(session, cmd),
         }
     }
 
