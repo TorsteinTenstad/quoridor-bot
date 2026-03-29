@@ -9,7 +9,7 @@ use crate::{
     },
     game_logic::{
         all_move_piece_moves, execute_move_unchecked, is_move_legal, is_move_piece_legal,
-        is_move_piece_legal_with_players_at_positions, room_for_wall_placement,
+        room_for_wall_placement,
     },
     render_board,
     square_outline_iterator::SquareOutlineIterator,
@@ -33,12 +33,10 @@ impl Agent for Abe {
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
         let current_game_state = session.game_states.last().unwrap();
-        let player = current_game_state.player;
         match cmd {
             SubCommand::ShowMove { depth, seconds } => {
                 let (_, best_moves) = get_bot_move(
                     current_game_state,
-                    player,
                     depth,
                     seconds.map(Duration::from_secs),
                     &mut session.cache,
@@ -50,7 +48,6 @@ impl Agent for Abe {
             SubCommand::Move { depth, seconds } => {
                 let (duration, best_moves) = get_bot_move(
                     current_game_state,
-                    player,
                     depth,
                     seconds.map(Duration::from_secs),
                     &mut session.cache,
@@ -72,7 +69,6 @@ impl Agent for Abe {
                             let next_game_state = execute_move_unchecked(current_game_state, &m);
                             let (_, best_moves) = get_bot_move(
                                 &next_game_state,
-                                player,
                                 depth,
                                 seconds.map(Duration::from_secs),
                                 &mut session.cache,
@@ -87,7 +83,6 @@ impl Agent for Abe {
                 } else {
                     let (_, best_moves) = get_bot_move(
                         current_game_state,
-                        player,
                         depth,
                         seconds.map(Duration::from_secs),
                         &mut session.cache,
@@ -212,7 +207,6 @@ pub fn heuristic_board_score(game: &Game) -> isize {
 
 pub fn best_move_alpha_beta_iterative_deepening(
     game: &Game,
-    player: Player,
     search_duration: Duration,
     cache: &mut Cache,
 ) -> Vec<BoardEvaluation> {
@@ -229,7 +223,6 @@ pub fn best_move_alpha_beta_iterative_deepening(
             depth + 1,
             WHITE_LOSES_BLACK_WINS,
             WHITE_WINS_BLACK_LOSES,
-            player,
             &search_first,
             deadline,
             cache,
@@ -244,18 +237,12 @@ pub fn best_move_alpha_beta_iterative_deepening(
         }
     }
 }
-pub fn best_move_alpha_beta(
-    game: &Game,
-    player: Player,
-    depth: usize,
-    cache: &mut Cache,
-) -> Vec<BoardEvaluation> {
+pub fn best_move_alpha_beta(game: &Game, depth: usize, cache: &mut Cache) -> Vec<BoardEvaluation> {
     match alpha_beta(
         game,
         depth,
         WHITE_LOSES_BLACK_WINS,
         WHITE_WINS_BLACK_LOSES,
-        player,
         Default::default(),
         None,
         cache,
@@ -297,7 +284,6 @@ fn alpha_beta(
     depth: usize,
     alpha: isize,
     beta: isize,
-    player: Player,
     search_first: &[PlayerMove],
     deadline: Option<Instant>,
     cache: &mut Cache,
@@ -337,13 +323,14 @@ fn alpha_beta(
     let mut alpha = alpha;
     let mut beta = beta;
     let mut best_moves = Vec::new();
+    let player = game.player;
     match player {
         Player::White => {
             let mut value = WHITE_LOSES_BLACK_WINS;
             for player_move in last
                 .cloned()
                 .into_iter()
-                .chain(moves_ordered_by_heuristic_quality(game, player))
+                .chain(moves_ordered_by_heuristic_quality(game))
             {
                 let child_game_state = execute_move_unchecked(game, &player_move);
                 if a_star(&child_game_state.board, player).is_none()
@@ -356,7 +343,6 @@ fn alpha_beta(
                     depth - 1,
                     alpha,
                     beta,
-                    player.opponent(),
                     if Some(&player_move) == last {
                         rest
                     } else {
@@ -400,7 +386,7 @@ fn alpha_beta(
             for player_move in last
                 .cloned()
                 .into_iter()
-                .chain(moves_ordered_by_heuristic_quality(game, player))
+                .chain(moves_ordered_by_heuristic_quality(game))
             {
                 let child_game_state = execute_move_unchecked(game, &player_move);
                 if a_star(&child_game_state.board, player).is_none()
@@ -413,7 +399,6 @@ fn alpha_beta(
                     depth - 1,
                     alpha,
                     beta,
-                    player.opponent(),
                     if Some(&player_move) == last {
                         rest
                     } else {
@@ -455,15 +440,15 @@ fn alpha_beta(
     }
 }
 
-fn moves_ordered_by_heuristic_quality(game: &Game, player: Player) -> Vec<PlayerMove> {
-    let player_position = game.board.player_position(player);
-    let opponent_position = game.board.player_position(player.opponent());
+fn moves_ordered_by_heuristic_quality(game: &Game) -> Vec<PlayerMove> {
+    let player_position = game.board.player_position(game.player);
+    let opponent_position = game.board.player_position(game.player.opponent());
 
     let mut moves: Vec<PlayerMove> = all_move_piece_moves(player_position, opponent_position)
         .filter(move |move_piece| is_move_piece_legal(game, move_piece))
         .map(PlayerMove::MovePiece)
         .collect();
-    if game.walls_left[player.as_index()] > 0 {
+    if game.walls_left[game.player.as_index()] > 0 {
         let origin = opponent_position;
         for i in 1.. {
             let top_left_x = origin.x as isize - i as isize;
@@ -502,17 +487,16 @@ fn moves_ordered_by_heuristic_quality(game: &Game, player: Player) -> Vec<Player
 
 pub fn get_bot_move(
     game: &Game,
-    player: Player,
     depth: Option<usize>,
     duration: Option<Duration>,
     cache: &mut Cache,
 ) -> (Duration, Vec<BoardEvaluation>) {
     let start_time = std::time::Instant::now();
     let best_moves = match (depth, duration) {
-        (Some(depth), _) => best_move_alpha_beta(game, player, depth, cache),
+        (Some(depth), _) => best_move_alpha_beta(game, depth, cache),
         (_, duration) => {
             let duration = duration.unwrap_or(Duration::from_secs(3));
-            best_move_alpha_beta_iterative_deepening(game, player, duration, cache)
+            best_move_alpha_beta_iterative_deepening(game, duration, cache)
         }
     };
     (start_time.elapsed(), best_moves)
