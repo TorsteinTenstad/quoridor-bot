@@ -2,6 +2,7 @@ use crate::{
     agent::{
         Agent,
         bot::{Cache, get_bot_move},
+        carlo::{self, CarloCommand},
         nn_bot::{self, QuoridorNet},
         random::{self, RandomCommand},
     },
@@ -77,6 +78,7 @@ pub struct BotSubCommand {
 
 #[derive(clap_derive::Subcommand, Debug)]
 pub enum BotCommand {
+    Carlo(CarloCommand),
     Random(RandomCommand),
 }
 
@@ -124,6 +126,7 @@ pub fn execute_command(session: &mut Session, command: Command) {
         }
         Command::AuxCommand(aux_command) => match aux_command {
             AuxCommand::Bot(bot_command) => match bot_command.cmd {
+                BotCommand::Carlo(cmd) => carlo::Carlo::default().execute(session, cmd.cmd),
                 BotCommand::Random(cmd) => random::Random::default().execute(session, cmd.cmd),
             },
             AuxCommand::Reset => *session = Session::new(HashMap::new()),

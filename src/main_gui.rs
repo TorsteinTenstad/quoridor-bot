@@ -93,6 +93,9 @@ fn main() {
                         depth: args.depth,
                         seconds: args.seconds,
                     }),
+                    AgentType::Carlo(agent) => {
+                        Command::PlayMove(agent.get_move(current_game_state))
+                    }
                     AgentType::Random(agent) => {
                         Command::PlayMove(agent.get_move(current_game_state))
                     }
