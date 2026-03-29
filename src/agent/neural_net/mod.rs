@@ -1,11 +1,47 @@
-#[derive(Default)]
-pub struct NeuralNet {}
+pub struct NeuralNet {
+    net: QuoridorNet,
+    default_temperature: f32,
+}
+
+impl Default for NeuralNet {
+    fn default() -> Self {
+        Self {
+            net: QuoridorNet::new(),
+            default_temperature: 0.5,
+        }
+    }
+}
+
+#[derive(clap_derive::Parser, Debug)]
+pub struct NeuralNetCommand {
+    #[command(subcommand)]
+    pub cmd: SubCommand,
+}
+
+#[derive(clap_derive::Subcommand, Debug)]
+pub enum SubCommand {
+    Move {
+        #[arg(short, long, default_value_t = 0.5)]
+        temperature: f32,
+    },
+}
 
 impl super::Agent for NeuralNet {
-    type Command = ();
+    type Command = SubCommand;
 
-    fn get_move(&mut self, _game: &Game) -> PlayerMove {
-        todo!()
+    fn get_move(&mut self, game: &Game) -> PlayerMove {
+        get_move(game, &self.net, self.default_temperature)
+    }
+
+    fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
+        match cmd {
+            Self::Command::Move { temperature } => {
+                let game = session.game_states.last().unwrap();
+                let m = get_move(game, &self.net, temperature);
+                let game = execute_move_unchecked(game, &m);
+                session.push(game, m);
+            }
+        }
     }
 }
 // quoridor_az_scaffold.rs
@@ -30,11 +66,12 @@ use burn::tensor::{Tensor, backend::Backend};
 use rand::{prelude::*, rng};
 
 use crate::all_moves::ALL_MOVES;
+use crate::commands::Session;
 use crate::data_model::{
     Game, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, Player, PlayerMove, WALL_GRID_HEIGHT,
     WALL_GRID_WIDTH, WallOrientation,
 };
-use crate::game_logic::is_move_legal;
+use crate::game_logic::{execute_move_unchecked, is_move_legal};
 
 // ===== 0) Domain adapter =====
 // Glue layer between YOUR existing rules/state and this scaffold.

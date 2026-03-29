@@ -22,13 +22,23 @@ use std::{
 };
 
 #[derive(Default)]
-pub struct Abe {}
+pub struct Abe {
+    default_depth: Option<usize>,
+    default_seconds: Option<u64>,
+    cache: Cache,
+}
 
 impl Agent for Abe {
     type Command = SubCommand;
 
-    fn get_move(&mut self, _game: &Game) -> PlayerMove {
-        todo!()
+    fn get_move(&mut self, game: &Game) -> PlayerMove {
+        let (_, best_moves) = get_bot_move(
+            game,
+            self.default_depth,
+            self.default_seconds.map(Duration::from_secs),
+            &mut self.cache,
+        );
+        best_moves.into_iter().last().unwrap().best_move
     }
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
@@ -39,7 +49,7 @@ impl Agent for Abe {
                     current_game_state,
                     depth,
                     seconds.map(Duration::from_secs),
-                    &mut session.cache,
+                    &mut self.cache,
                 );
                 for eval in best_moves.iter().rev() {
                     println!("{eval}");
@@ -50,7 +60,7 @@ impl Agent for Abe {
                     current_game_state,
                     depth,
                     seconds.map(Duration::from_secs),
-                    &mut session.cache,
+                    &mut self.cache,
                 );
                 let m = best_moves.into_iter().last().unwrap().best_move;
                 println!("{} {:?}", m, duration);
@@ -71,7 +81,7 @@ impl Agent for Abe {
                                 &next_game_state,
                                 depth,
                                 seconds.map(Duration::from_secs),
-                                &mut session.cache,
+                                &mut self.cache,
                             );
                             println!("{}", best_moves.last().unwrap().score);
                         } else {
@@ -85,7 +95,7 @@ impl Agent for Abe {
                         current_game_state,
                         depth,
                         seconds.map(Duration::from_secs),
-                        &mut session.cache,
+                        &mut self.cache,
                     );
                     println!(
                         "Best move evaluates to {}",
@@ -95,7 +105,7 @@ impl Agent for Abe {
             }
             SubCommand::ExportCache { file: path } => match std::fs::File::create(path) {
                 Ok(file) => {
-                    serde_json::ser::to_writer_pretty(file, &session.cache).unwrap();
+                    serde_json::ser::to_writer_pretty(file, &self.cache).unwrap();
                 }
                 Err(e) => {
                     println!("{:?}", e)
@@ -103,7 +113,7 @@ impl Agent for Abe {
             },
             SubCommand::ImportCache { file: path } => match std::fs::File::open(path) {
                 Ok(file) => match serde_json::de::from_reader::<_, Cache>(file) {
-                    Ok(cache) => session.cache = cache,
+                    Ok(cache) => self.cache = cache,
                     Err(e) => {
                         println!("{:?}", e)
                     }

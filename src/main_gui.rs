@@ -5,13 +5,12 @@ use ggez::{
     {Context, ContextBuilder, GameResult},
 };
 use lib::{
-    agent::{AgentType, Agents, neural_net::QuoridorNet},
+    agent::{AgentType, Agents},
     commands::{Command, Session, execute_command, get_legal_command},
     data_model::{Game, Player},
     draw,
 };
 use std::{
-    collections::HashMap,
     fmt::{Debug, Display},
     sync::mpsc::{Receiver, channel},
 };
@@ -69,11 +68,6 @@ impl Display for InputType {
 fn main() {
     let args = Args::parse();
 
-    // TODO: only needed when white/black is neural network
-    let mut neural_networks: HashMap<Player, QuoridorNet> = HashMap::new();
-    neural_networks.insert(Player::White, QuoridorNet::new());
-    neural_networks.insert(Player::Black, QuoridorNet::new());
-
     let (ctx, event_loop) = ContextBuilder::new("quoridor-bot", "Torstein Tenstad")
         .window_mode(
             WindowMode::default()
@@ -89,32 +83,33 @@ fn main() {
     };
 
     std::thread::spawn(move || {
-        let mut agent_white = InputType::from(args.player_white);
-        let mut agent_black = InputType::from(args.player_black);
+        let input_type_white = InputType::from(args.player_white);
+        let input_type_black = InputType::from(args.player_black);
+        let mut agents_white = Agents::default();
+        let mut agents_black = Agents::default();
 
-        let mut session = Session::new(neural_networks);
-        let mut agents = Agents::default();
+        let mut session = Session::default();
         loop {
             let current_game_state = session.game_states.last().unwrap();
             let player = current_game_state.player;
-            let agent = match player {
-                Player::White => &mut agent_white,
-                Player::Black => &mut agent_black,
+            let (input_type, agents) = match player {
+                Player::White => (&input_type_white, &mut agents_white),
+                Player::Black => (&input_type_black, &mut agents_black),
             };
             println!(
                 "{} ({}) to move. Walls: White: {}, Black: {}",
                 player.to_string(),
-                agent,
+                input_type,
                 current_game_state.walls_left[Player::White.as_index()],
                 current_game_state.walls_left[Player::Black.as_index()]
             );
-            let command = match agent {
+            let command = match input_type {
                 InputType::Manual => get_legal_command(current_game_state),
                 InputType::Automatic(agent_type) => Command::PlayMove(
                     agents.get_move(session.game_states.last().unwrap(), agent_type),
                 ),
             };
-            execute_command(&mut agents, &mut session, command);
+            execute_command(agents, &mut session, command);
             tx.send(session.game_states.last().unwrap().clone())
                 .unwrap();
         }

@@ -36,6 +36,7 @@ pub struct Agents {
 pub enum BotCommand {
     Abe(abe::AbeCommand),
     Carlo(carlo::CarloCommand),
+    NeuralNet(neural_net::NeuralNetCommand),
     Random(random::RandomCommand),
 }
 
@@ -53,6 +54,7 @@ impl Agents {
         match command {
             BotCommand::Carlo(cmd) => self.carlo.execute(session, cmd.cmd),
             BotCommand::Random(cmd) => self.random.execute(session, cmd.cmd),
+            BotCommand::NeuralNet(cmd) => self.neural_net.execute(session, cmd.cmd),
             BotCommand::Abe(cmd) => self.abe.execute(session, cmd.cmd),
         }
     }

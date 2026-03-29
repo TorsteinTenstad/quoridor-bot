@@ -1,23 +1,15 @@
 use crate::{
-    agent::{
-        Agents, BotCommand,
-        abe::Cache,
-        neural_net::{self, QuoridorNet},
-    },
-    data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
+    agent::{Agents, BotCommand},
+    data_model::{Direction, Game, MovePiece, PlayerMove, WallOrientation, WallPosition},
     game_logic::{execute_move_unchecked, is_move_legal},
 };
 use clap::Parser;
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 #[derive(clap_derive::Subcommand, Debug)]
 pub enum AuxCommand {
     Bot(BotSubCommand),
     Reset,
-    PlayNNMove {
-        #[arg(default_value_t = 0.0)]
-        temperature: f32,
-    },
     Undo {
         #[arg(default_value_t = 1)]
         moves: usize,
@@ -56,20 +48,19 @@ pub enum Command {
 
 pub struct Session {
     pub game_states: Vec<Game>,
-    pub neural_networks: HashMap<Player, QuoridorNet>,
     pub moves: Vec<PlayerMove>,
-    pub cache: Cache,
 }
-impl Session {
-    pub fn new(neural_networks: HashMap<Player, QuoridorNet>) -> Self {
+
+impl Default for Session {
+    fn default() -> Self {
         Self {
             game_states: vec![Game::new()],
-            neural_networks,
-            moves: Vec::new(),
-            cache: Default::default(),
+            moves: Default::default(),
         }
     }
+}
 
+impl Session {
     pub fn push(&mut self, game_state: Game, m: PlayerMove) {
         self.game_states.push(game_state);
         self.moves.push(m);
@@ -78,7 +69,6 @@ impl Session {
 
 pub fn execute_command(agents: &mut Agents, session: &mut Session, command: Command) {
     let current_game_state = session.game_states.last().unwrap();
-    let player = current_game_state.player;
     match command {
         Command::PlayMove(m) => {
             let next_game_state = execute_move_unchecked(current_game_state, &m);
@@ -86,17 +76,7 @@ pub fn execute_command(agents: &mut Agents, session: &mut Session, command: Comm
         }
         Command::AuxCommand(aux_command) => match aux_command {
             AuxCommand::Bot(bot_command) => agents.execute_bot_command(session, bot_command.cmd),
-            AuxCommand::Reset => *session = Session::new(HashMap::new()),
-            AuxCommand::PlayNNMove { temperature } => {
-                let m = neural_net::get_move(
-                    current_game_state,
-                    session.neural_networks.get(&player).unwrap(),
-                    temperature,
-                );
-
-                let next_game_state = execute_move_unchecked(current_game_state, &m);
-                session.push(next_game_state, m);
-            }
+            AuxCommand::Reset => *session = Session::default(),
             AuxCommand::Undo { moves } => {
                 for _ in 0..moves {
                     if session.game_states.len() == 1 {
@@ -139,7 +119,7 @@ pub fn execute_command(agents: &mut Agents, session: &mut Session, command: Comm
                     .map(parse_player_move)
                     .collect::<Option<Vec<_>>>()
                 {
-                    *session = Session::new(HashMap::new());
+                    *session = Session::default();
                     for m in moves {
                         let current_game_state = session.game_states.last().unwrap();
                         let next_game_state = execute_move_unchecked(current_game_state, &m);
