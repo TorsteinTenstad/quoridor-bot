@@ -38,6 +38,11 @@ impl Agent for Carlo {
                 let m = self.get_move(game);
                 execute_command(session, Command::PlayMove(m));
             }
+            SubCommand::DebugBoard => {
+                let game = session.game_states.last().unwrap();
+                let board = board::Board::from(game);
+                println!("{:?}", board)
+            }
         }
     }
 }
@@ -51,4 +56,5 @@ pub struct CarloCommand {
 #[derive(clap_derive::Subcommand, Debug)]
 pub enum SubCommand {
     Move,
+    DebugBoard,
 }
