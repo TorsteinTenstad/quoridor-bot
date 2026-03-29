@@ -1,3 +1,5 @@
+mod board;
+
 use rand::{rngs::ThreadRng, seq::IteratorRandom};
 
 use crate::{
