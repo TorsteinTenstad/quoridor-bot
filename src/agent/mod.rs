@@ -1,5 +1,6 @@
 pub mod abe;
 pub mod carlo;
+pub mod dedi;
 pub mod nn_bot;
 pub mod random;
 
