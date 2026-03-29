@@ -1,21 +1,33 @@
 use core::time;
 use std::thread::sleep;
 
+use rand::{rngs::ThreadRng, seq::IteratorRandom};
+
 use crate::{
     agent::Agent,
-    all_moves::ALL_MOVES,
     commands::{Command, Session, execute_command},
-    data_model::{Game, PlayerMove},
+    data_model::{Direction, Game, MovePiece, PlayerMove},
+    game_logic::is_move_direction_legal_with_player_at_position,
 };
 
-pub struct Random;
+#[derive(Default)]
+pub struct Random {
+    rng: ThreadRng,
+}
 
 impl Agent for Random {
     type Command = SubCommand;
 
-    fn get_move(&mut self, _game: &Game) -> PlayerMove {
-        // TODO: random valid move
-        ALL_MOVES[0].clone()
+    fn get_move(&mut self, game: &Game) -> PlayerMove {
+        let pos = game.board.player_position(game.player);
+        let dir = Direction::iter()
+            .filter(|d| is_move_direction_legal_with_player_at_position(&game.board, pos, d))
+            .choose(&mut self.rng)
+            .expect("at least one move will always be valid");
+        PlayerMove::MovePiece(MovePiece {
+            direction: dir,
+            direction_on_collision: Direction::Up,
+        })
     }
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {

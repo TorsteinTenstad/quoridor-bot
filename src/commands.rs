@@ -124,7 +124,7 @@ pub fn execute_command(session: &mut Session, command: Command) {
         }
         Command::AuxCommand(aux_command) => match aux_command {
             AuxCommand::Bot(bot_command) => match bot_command.cmd {
-                BotCommand::Random(cmd) => random::Random.execute(session, cmd.cmd),
+                BotCommand::Random(cmd) => random::Random::default().execute(session, cmd.cmd),
             },
             AuxCommand::Reset => *session = Session::new(HashMap::new()),
             AuxCommand::BotMove { depth, seconds } => {

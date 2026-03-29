@@ -11,7 +11,7 @@ use crate::{
     data_model::{Game, PlayerMove},
 };
 
-pub trait Agent {
+pub trait Agent: Default {
     type Command;
 
     fn get_move(&mut self, game: &Game) -> PlayerMove;
@@ -71,7 +71,7 @@ impl From<AgentArg> for InputType {
             AgentArg::Manual => InputType::Manual,
             AgentArg::Bot => InputType::Automatic(AgentType::Bot),
             AgentArg::NeuralNet => InputType::Automatic(AgentType::NeuralNet),
-            AgentArg::Random => InputType::Automatic(AgentType::Random(random::Random)),
+            AgentArg::Random => InputType::Automatic(AgentType::Random(random::Random::default())),
         }
     }
 }
