@@ -1,12 +1,8 @@
 pub mod abe;
 pub mod carlo;
 pub mod dedi;
-pub mod nn_bot;
+pub mod neural_net;
 pub mod random;
-
-use std::fmt::Display;
-
-use clap::ValueEnum;
 
 use crate::{
     commands::Session,
@@ -17,67 +13,47 @@ pub trait Agent: Default {
     type Command;
 
     fn get_move(&mut self, game: &Game) -> PlayerMove;
-
-    fn name(&self) -> &str {
-        "agent"
-    }
-
     fn execute(&mut self, _session: &mut Session, _cmd: Self::Command) {}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap_derive::ValueEnum)]
-pub enum AgentArg {
-    Carlo,
+pub enum AgentType {
     Abe,
-    Manual,
+    Carlo,
     NeuralNet,
     Random,
 }
 
-impl Display for AgentArg {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(
-            self.to_possible_value()
-                .expect("clap ValueEnum unable to find its own name")
-                .get_name(),
-        )
-    }
+#[derive(Default)]
+pub struct Agents {
+    abe: abe::Abe,
+    carlo: carlo::Carlo,
+    neural_net: neural_net::NeuralNet,
+    random: random::Random,
 }
 
-pub enum InputType {
-    Manual,
-    Automatic(AgentType),
+#[derive(clap_derive::Subcommand, Debug)]
+pub enum BotCommand {
+    Abe(abe::AbeCommand),
+    Carlo(carlo::CarloCommand),
+    Random(random::RandomCommand),
 }
 
-pub enum AgentType {
-    Carlo(carlo::Carlo),
-    Abe,
-    NeuralNet,
-    Random(random::Random),
-}
-
-impl Display for InputType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InputType::Manual => write!(f, "manual"),
-            InputType::Automatic(agent) => match agent {
-                AgentType::Carlo(agent) => write!(f, "{}", agent.name()),
-                AgentType::Abe => write!(f, "abe"),
-                AgentType::NeuralNet => write!(f, "neural network"),
-                AgentType::Random(agent) => write!(f, "{}", agent.name()),
-            },
+impl Agents {
+    pub fn get_move(&mut self, game: &Game, agent_type: &AgentType) -> PlayerMove {
+        match agent_type {
+            AgentType::Abe => self.abe.get_move(game),
+            AgentType::Carlo => self.carlo.get_move(game),
+            AgentType::NeuralNet => self.neural_net.get_move(game),
+            AgentType::Random => self.random.get_move(game),
         }
     }
-}
 
-impl From<AgentArg> for InputType {
-    fn from(value: AgentArg) -> InputType {
-        match value {
-            AgentArg::Manual => InputType::Manual,
-            AgentArg::Carlo => InputType::Automatic(AgentType::Carlo(carlo::Carlo::default())),
-            AgentArg::Abe => InputType::Automatic(AgentType::Abe),
-            AgentArg::NeuralNet => InputType::Automatic(AgentType::NeuralNet),
-            AgentArg::Random => InputType::Automatic(AgentType::Random(random::Random::default())),
+    pub fn execute_bot_command(&mut self, session: &mut Session, command: BotCommand) {
+        match command {
+            BotCommand::Carlo(cmd) => self.carlo.execute(session, cmd.cmd),
+            BotCommand::Random(cmd) => self.random.execute(session, cmd.cmd),
+            BotCommand::Abe(cmd) => self.abe.execute(session, cmd.cmd),
         }
     }
 }

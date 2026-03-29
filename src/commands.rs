@@ -1,10 +1,8 @@
 use crate::{
     agent::{
-        Agent,
-        abe::{self, AbeCommand, Cache},
-        carlo::{self, CarloCommand},
-        nn_bot::{self, QuoridorNet},
-        random::{self, RandomCommand},
+        Agents, BotCommand,
+        abe::Cache,
+        neural_net::{self, QuoridorNet},
     },
     data_model::{Direction, Game, MovePiece, Player, PlayerMove, WallOrientation, WallPosition},
     game_logic::{execute_move_unchecked, is_move_legal},
@@ -44,13 +42,6 @@ pub struct BotSubCommand {
     pub cmd: BotCommand,
 }
 
-#[derive(clap_derive::Subcommand, Debug)]
-pub enum BotCommand {
-    Carlo(CarloCommand),
-    Random(RandomCommand),
-    Abe(AbeCommand),
-}
-
 #[derive(clap_derive::Parser, Debug)]
 #[command(name = AUX_COMMAND_NAME)]
 struct AuxCommandParserHelper {
@@ -85,7 +76,7 @@ impl Session {
     }
 }
 
-pub fn execute_command(session: &mut Session, command: Command) {
+pub fn execute_command(agents: &mut Agents, session: &mut Session, command: Command) {
     let current_game_state = session.game_states.last().unwrap();
     let player = current_game_state.player;
     match command {
@@ -94,14 +85,10 @@ pub fn execute_command(session: &mut Session, command: Command) {
             session.push(next_game_state, m);
         }
         Command::AuxCommand(aux_command) => match aux_command {
-            AuxCommand::Bot(bot_command) => match bot_command.cmd {
-                BotCommand::Carlo(cmd) => carlo::Carlo::default().execute(session, cmd.cmd),
-                BotCommand::Random(cmd) => random::Random::default().execute(session, cmd.cmd),
-                BotCommand::Abe(cmd) => abe::Abe::default().execute(session, cmd.cmd),
-            },
+            AuxCommand::Bot(bot_command) => agents.execute_bot_command(session, bot_command.cmd),
             AuxCommand::Reset => *session = Session::new(HashMap::new()),
             AuxCommand::PlayNNMove { temperature } => {
-                let m = nn_bot::get_move(
+                let m = neural_net::get_move(
                     current_game_state,
                     session.neural_networks.get(&player).unwrap(),
                     temperature,

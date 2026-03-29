@@ -6,9 +6,9 @@ use rand::{Rng, rngs::ThreadRng, seq::IteratorRandom};
 use crate::{
     agent::Agent,
     all_moves::ALL_MOVES,
-    commands::{Command, Session, execute_command},
+    commands::Session,
     data_model::{Game, PlayerMove},
-    game_logic::{all_move_piece_moves, is_move_legal},
+    game_logic::{all_move_piece_moves, execute_move_unchecked, is_move_legal},
 };
 
 #[derive(Default)]
@@ -18,10 +18,6 @@ pub struct Random {
 
 impl Agent for Random {
     type Command = SubCommand;
-
-    fn name(&self) -> &str {
-        "random"
-    }
 
     fn get_move(&mut self, game: &Game) -> PlayerMove {
         let pos = game.board.player_position(game.player);
@@ -48,7 +44,8 @@ impl Agent for Random {
 
                 let game = session.game_states.last().unwrap();
                 let m = self.get_move(game);
-                execute_command(session, Command::PlayMove(m));
+                let game = execute_move_unchecked(game, &m);
+                session.push(game, m);
             }
         }
     }

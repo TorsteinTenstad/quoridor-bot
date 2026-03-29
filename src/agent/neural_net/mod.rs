@@ -1,3 +1,13 @@
+#[derive(Default)]
+pub struct NeuralNet {}
+
+impl super::Agent for NeuralNet {
+    type Command = ();
+
+    fn get_move(&mut self, _game: &Game) -> PlayerMove {
+        todo!()
+    }
+}
 // quoridor_az_scaffold.rs
 // Minimal, idiomatic Rust scaffold for an AlphaZero-style Quoridor agent.
 // Assumes you already have rules/state/move-gen. Plug them in via the GameAdapter trait below.

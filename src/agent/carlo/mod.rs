@@ -5,9 +5,9 @@ use rand::{rngs::ThreadRng, seq::IteratorRandom};
 use crate::{
     agent::Agent,
     all_moves::ALL_MOVES,
-    commands::{Command, Session, execute_command},
+    commands::Session,
     data_model::{Game, PlayerMove},
-    game_logic::is_move_legal,
+    game_logic::{execute_move_unchecked, is_move_legal},
 };
 
 #[derive(Default)]
@@ -17,10 +17,6 @@ pub struct Carlo {
 
 impl Agent for Carlo {
     type Command = SubCommand;
-
-    fn name(&self) -> &str {
-        "carlo"
-    }
 
     fn get_move(&mut self, game: &Game) -> PlayerMove {
         ALL_MOVES
@@ -36,7 +32,8 @@ impl Agent for Carlo {
             SubCommand::Move => {
                 let game = session.game_states.last().unwrap();
                 let m = self.get_move(game);
-                execute_command(session, Command::PlayMove(m));
+                let game = execute_move_unchecked(game, &m);
+                session.push(game, m)
             }
             SubCommand::DebugBoard => {
                 let game = session.game_states.last().unwrap();

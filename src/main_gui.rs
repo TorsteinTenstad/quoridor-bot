@@ -5,13 +5,14 @@ use ggez::{
     {Context, ContextBuilder, GameResult},
 };
 use lib::{
-    agent::{Agent, AgentArg, AgentType, InputType, abe, nn_bot::QuoridorNet},
-    commands::{self, Command, Session, execute_command, get_legal_command},
+    agent::{AgentType, Agents, neural_net::QuoridorNet},
+    commands::{Command, Session, execute_command, get_legal_command},
     data_model::{Game, Player},
     draw,
 };
 use std::{
     collections::HashMap,
+    fmt::{Debug, Display},
     sync::mpsc::{Receiver, channel},
 };
 
@@ -26,11 +27,11 @@ struct Args {
     #[clap(short, long, default_value_t = 0.0)]
     temperature: f32,
 
-    #[clap(short='w', long, default_value_t = AgentArg::Manual)]
-    player_white: AgentArg,
+    #[clap(short = 'w', long)]
+    player_white: Option<AgentType>,
 
-    #[clap(short='b', long, default_value_t = AgentArg::Abe)]
-    player_black: AgentArg,
+    #[clap(short = 'b', long)]
+    player_black: Option<AgentType>,
 
     #[clap(short, long)]
     end_after_moves: Option<usize>,
@@ -40,6 +41,29 @@ struct Args {
 
     #[clap(long)]
     skip_initial_moves: bool,
+}
+
+pub enum InputType {
+    Manual,
+    Automatic(AgentType),
+}
+
+impl From<Option<AgentType>> for InputType {
+    fn from(value: Option<AgentType>) -> Self {
+        match value {
+            Some(agent_type) => InputType::Automatic(agent_type),
+            None => InputType::Manual,
+        }
+    }
+}
+
+impl Display for InputType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InputType::Automatic(agent_type) => agent_type.fmt(f),
+            InputType::Manual => write!(f, "manual"),
+        }
+    }
 }
 
 fn main() {
@@ -69,6 +93,7 @@ fn main() {
         let mut agent_black = InputType::from(args.player_black);
 
         let mut session = Session::new(neural_networks);
+        let mut agents = Agents::default();
         loop {
             let current_game_state = session.game_states.last().unwrap();
             let player = current_game_state.player;
@@ -85,29 +110,11 @@ fn main() {
             );
             let command = match agent {
                 InputType::Manual => get_legal_command(current_game_state),
-                InputType::Automatic(agent) => match agent {
-                    AgentType::NeuralNet => Command::AuxCommand(commands::AuxCommand::PlayNNMove {
-                        temperature: args.temperature,
-                    }),
-                    AgentType::Abe => {
-                        Command::AuxCommand(commands::AuxCommand::Bot(commands::BotSubCommand {
-                            cmd: commands::BotCommand::Abe(abe::AbeCommand {
-                                cmd: abe::SubCommand::Move {
-                                    depth: args.depth,
-                                    seconds: args.seconds,
-                                },
-                            }),
-                        }))
-                    }
-                    AgentType::Carlo(agent) => {
-                        Command::PlayMove(agent.get_move(current_game_state))
-                    }
-                    AgentType::Random(agent) => {
-                        Command::PlayMove(agent.get_move(current_game_state))
-                    }
-                },
+                InputType::Automatic(agent_type) => Command::PlayMove(
+                    agents.get_move(session.game_states.last().unwrap(), agent_type),
+                ),
             };
-            execute_command(&mut session, command);
+            execute_command(&mut agents, &mut session, command);
             tx.send(session.game_states.last().unwrap().clone())
                 .unwrap();
         }

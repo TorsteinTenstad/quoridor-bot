@@ -11,11 +11,7 @@ pub struct Dedi {}
 
 impl Agent for Dedi {
     type Command = SubCommand;
-
-    fn name(&self) -> &str {
-        "dedi"
-    }
-
+    
     fn get_move(&mut self, _: &Game) -> PlayerMove {
         PlayerMove::MovePiece({
             MovePiece {
