@@ -3,6 +3,7 @@ use crate::{
         Agent,
         abe::{self, AbeCommand, Cache},
         carlo::{self, CarloCommand},
+        dedi::{self, DediCommand},
         nn_bot::{self, QuoridorNet},
         random::{self, RandomCommand},
     },
@@ -49,6 +50,7 @@ pub enum BotCommand {
     Carlo(CarloCommand),
     Random(RandomCommand),
     Abe(AbeCommand),
+    Dedi(DediCommand),
 }
 
 #[derive(clap_derive::Parser, Debug)]
@@ -98,6 +100,7 @@ pub fn execute_command(session: &mut Session, command: Command) {
                 BotCommand::Carlo(cmd) => carlo::Carlo::default().execute(session, cmd.cmd),
                 BotCommand::Random(cmd) => random::Random::default().execute(session, cmd.cmd),
                 BotCommand::Abe(cmd) => abe::Abe::default().execute(session, cmd.cmd),
+                BotCommand::Dedi(cmd) => dedi::Dedi::default().execute(session, cmd.cmd),
             },
             AuxCommand::Reset => *session = Session::new(HashMap::new()),
             AuxCommand::PlayNNMove { temperature } => {

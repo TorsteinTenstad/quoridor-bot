@@ -1,7 +1,8 @@
+pub mod bit_set;
 mod walls;
 
 use crate::{
-    agent::Agent,
+    agent::{Agent, dedi::walls::get_illegal_walls},
     commands::Session,
     data_model::{Direction, Game, MovePiece, PlayerMove},
 };
@@ -25,8 +26,22 @@ impl Agent for Dedi {
         })
     }
 
-    fn execute(&mut self, _: &mut Session, _: Self::Command) {}
+    fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
+        match cmd {
+            SubCommand::D1 => {
+                get_illegal_walls(session.game_states.last().unwrap());
+            }
+        }
+    }
+}
+
+#[derive(clap_derive::Parser, Debug)]
+pub struct DediCommand {
+    #[command(subcommand)]
+    pub cmd: SubCommand,
 }
 
 #[derive(clap_derive::Subcommand, Debug)]
-pub enum SubCommand {}
+pub enum SubCommand {
+    D1,
+}

@@ -35,7 +35,7 @@ struct Args {
     #[clap(short, long)]
     end_after_moves: Option<usize>,
 
-    #[clap(short, long, default_value_t = 1000)]
+    #[clap(long, default_value_t = 1000)]
     window_size: usize,
 
     #[clap(long)]

@@ -54,7 +54,7 @@ pub struct WallPosition {
 }
 
 #[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Walls(pub [[Option<WallOrientation>; WALL_GRID_HEIGHT]; WALL_GRID_WIDTH]);
+pub struct Walls(pub [[Option<WallOrientation>; WALL_GRID_WIDTH]; WALL_GRID_HEIGHT]);
 
 #[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Board {
@@ -144,7 +144,10 @@ impl Board {
     pub fn new() -> Self {
         Self {
             walls: Default::default(),
-            player_positions: [PiecePosition::new(4, 0), PiecePosition::new(4, 8)],
+            player_positions: [
+                PiecePosition::new(PIECE_GRID_WIDTH / 2, 0),
+                PiecePosition::new(PIECE_GRID_WIDTH / 2, PIECE_GRID_HEIGHT - 1),
+            ],
         }
     }
     pub fn new_with_initial_moves_skipped() -> Self {
