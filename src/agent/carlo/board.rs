@@ -34,9 +34,9 @@ pub struct Board {
 
 impl Debug for Board {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for y in self.board {
-            for x in y {
-                let _ = write!(f, "{:3}{:?} ", x.1, x.0);
+        for row in self.board {
+            for square in row {
+                let _ = write!(f, "{:3}{:?} ", square.1, square.0);
             }
             let _ = write!(f, "\n");
         }
@@ -93,19 +93,9 @@ impl From<&Game> for Board {
                     _ => unreachable!(),
                 };
 
-                for i in 0..2 {
-                    let wx = match dx {
-                        -1 => [x - 1, x - 1],
-                        1 => [x, x],
-                        0 => [x - 1, x],
-                        _ => unreachable!(),
-                    }[i];
-                    let wy = match dy {
-                        -1 => [y - 1, y - 1],
-                        1 => [y, y],
-                        0 => [y - 1, y],
-                        _ => unreachable!(),
-                    }[i];
+                let wall_xs = [x - 1 + (dx == 1) as i8, x - (dx == -1) as i8];
+                let wall_ys = [y - 1 + (dy == 1) as i8, y - (dy == -1) as i8];
+                for (wx, wy) in wall_xs.into_iter().zip(wall_ys.into_iter()) {
                     if wx < 0
                         || wx >= WALL_GRID_WIDTH as i8
                         || wy < 0
