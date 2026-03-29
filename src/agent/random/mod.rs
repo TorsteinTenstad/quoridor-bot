@@ -26,14 +26,16 @@ impl Agent for Random {
     fn get_move(&mut self, game: &Game) -> PlayerMove {
         let pos = game.board.player_position(game.player);
         let opponent_pos = game.board.player_position(game.player.opponent());
-        let moves: Box<dyn Iterator<Item = PlayerMove>> = if self.rng.random::<f32>() < 0.75 {
-            Box::new(all_move_piece_moves(pos, opponent_pos).map(|m| PlayerMove::MovePiece(m)))
-        } else {
-            Box::new(ALL_MOVES.iter().cloned())
-        };
+        let move_piece = self.rng.random::<f32>() < 0.75;
+        let move_piece_iter = move_piece
+            .then_some(all_move_piece_moves(pos, opponent_pos).map(PlayerMove::MovePiece));
+        let all_move_iter = (!move_piece).then_some(Box::new(ALL_MOVES.iter().cloned()));
+        let moves = std::iter::empty()
+            .chain(move_piece_iter.into_iter().flatten())
+            .chain(all_move_iter.into_iter().flatten());
 
         moves
-            .filter(|m| is_move_legal_with_player_at_position(&game, game.player, pos, m))
+            .filter(|m| is_move_legal_with_player_at_position(game, game.player, pos, m))
             .choose(&mut self.rng)
             .expect("at least one move will always be valid")
             .clone()
