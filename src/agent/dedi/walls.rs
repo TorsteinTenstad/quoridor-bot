@@ -5,7 +5,9 @@ use crate::{
         WALL_GRID_WIDTH, WallOrientation, WallPosition,
     },
 };
+use std::collections::VecDeque;
 
+#[derive(Debug)]
 pub struct Wall {
     position: WallPosition,
     orientation: WallOrientation,
@@ -22,7 +24,7 @@ pub fn get_illegal_walls(game: &Game) -> Vec<Wall> {
     let mut board_walls = Bitset192::new(0, 0, 0);
     for y in 0..WALL_GRID_HEIGHT {
         for x in 0..WALL_GRID_HEIGHT {
-            let wall = game.board.walls.0[y][x];
+            let wall = game.board.walls.0[x][y];
             match wall {
                 None => {}
                 Some(orientation) => {
@@ -36,30 +38,21 @@ pub fn get_illegal_walls(game: &Game) -> Vec<Wall> {
         }
     }
 
-    let mut all_wall_paths: Vec<Bitset192> = Vec::new();
-    let tile_path = Bitset192::new(0, 0, 0);
-    let wall_path = Bitset192::new(0, 0, 0);
     let y_target = match game.player {
         Player::Black => 0,
         Player::White => PIECE_GRID_HEIGHT - 1,
     };
 
-    let result = dfs(
-        game,
-        &board_walls,
-        &mut all_wall_paths,
-        tile_path,
-        wall_path,
-        position,
-        y_target,
-    );
+    // let a: Vec<Wall> = board_walls
+    //     .iter_ones()
+    //     .map(|index| wall_from_index(index))
+    //     .collect();
+    // println!("{:?}", a);
 
-    println!("{:?}", all_wall_paths.len());
+    let wall_bitsets = bfs(&board_walls, position, y_target);
 
-    if match result {
-        DfsResult::Unknown => false,
-        DfsResult::EarlyReturn => true,
-    } {
+    if wall_bitsets.len() == 0 {
+        println!("No illegal walls :)");
         return Vec::new();
     }
 
@@ -67,47 +60,58 @@ pub fn get_illegal_walls(game: &Game) -> Vec<Wall> {
     let mut b = !0u64;
     let mut c = !0u64;
 
-    for bs in &all_wall_paths {
+    for bs in &wall_bitsets {
         a &= bs.a;
         b &= bs.b;
         c &= bs.c;
     }
 
-    Bitset192 { a, b, c }
+    let walls: Vec<Wall> = Bitset192 { a, b, c }
         .iter_ones()
         .map(|index| wall_from_index(index))
-        .collect()
+        .collect();
+
+    println!("Illegal!: {:?}", walls);
+
+    walls
 }
 
-pub fn dfs(
-    game: &Game,
-    board_walls: &Bitset192,
-    all_wall_paths: &mut Vec<Bitset192>,
-    tile_path: Bitset192,
-    wall_path: Bitset192,
-    position: &PiecePosition,
-    y_target: usize,
-) -> DfsResult {
-    let mut tile_path = tile_path;
-    assert!(tile_path.get_bit(tile_index(position)) == false);
-    tile_path.set_bit(tile_index(position));
+pub fn bfs(board_walls: &Bitset192, initial: &PiecePosition, y_target: usize) -> Vec<Bitset192> {
+    let mut wall_paths: Vec<Bitset192> = Vec::new();
+    let tile_path = Bitset192::new(0, 0, 0);
+    let wall_path = Bitset192::new(0, 0, 0);
 
-    println!("{:?}", tile_path.iter_ones().count());
+    let mut queue = VecDeque::new();
+    queue.push_back((initial.clone(), tile_path, wall_path));
 
-    if position.y == y_target {
-        for other in all_wall_paths.iter() {
-            let join = wall_path & *other;
-            if !join.any() {
-                println!("DONE");
-                return DfsResult::EarlyReturn;
+    while let Some((position, tile_path, wall_path)) = queue.pop_front() {
+        let mut tile_path = tile_path;
+        assert!(tile_path.get_bit(tile_index(&position)) == false);
+        tile_path.set_bit(tile_index(&position));
+
+        if position.y == y_target {
+            for other in wall_paths.iter() {
+                let join = wall_path & *other;
+                if !join.any() {
+                    println!("Disjoint. Done :)");
+                    let a: Vec<Wall> = other
+                        .iter_ones()
+                        .map(|index| wall_from_index(index))
+                        .collect();
+                    let b: Vec<Wall> = wall_path
+                        .iter_ones()
+                        .map(|index| wall_from_index(index))
+                        .collect();
+                    println!("{:?}", a);
+                    println!("{:?}", b);
+                    return Vec::new();
+                }
             }
+            wall_paths.push(wall_path);
+            continue;
         }
-        all_wall_paths.push(wall_path);
-        return DfsResult::Unknown;
-    }
 
-    let mut targets: Vec<PiecePosition> = Vec::new();
-    if position.y > y_target {
+        let mut targets: Vec<PiecePosition> = Vec::new();
         if position.y > 0 {
             targets.push(PiecePosition {
                 x: position.x,
@@ -120,79 +124,49 @@ pub fn dfs(
                 y: position.y + 1,
             });
         }
-    } else {
-        if position.y > 0 {
+        if position.x > 0 {
             targets.push(PiecePosition {
-                x: position.x,
-                y: position.y - 1,
+                x: position.x - 1,
+                y: position.y,
             });
         }
-        if position.y < PIECE_GRID_HEIGHT - 1 {
+        if position.x < PIECE_GRID_WIDTH - 1 {
             targets.push(PiecePosition {
-                x: position.x,
-                y: position.y + 1,
+                x: position.x + 1,
+                y: position.y,
             });
         }
-    }
-    if position.x > 0 {
-        targets.push(PiecePosition {
-            x: position.x - 1,
-            y: position.y,
-        });
-    }
-    if position.x < PIECE_GRID_WIDTH - 1 {
-        targets.push(PiecePosition {
-            x: position.x + 1,
-            y: position.y,
-        });
-    }
 
-    for target in targets {
-        let target_index = tile_index(&target);
-        if tile_path.get_bit(target_index) {
-            continue;
-        }
-
-        let walls = walls_between(position, &target);
-        let mut wall_path = wall_path;
-        match walls {
-            WallsBetween::Single(wall) => {
-                wall_path.set_bit(wall_index(wall));
+        for target in targets {
+            let target_index = tile_index(&target);
+            if tile_path.get_bit(target_index) {
+                continue;
             }
-            WallsBetween::Double(wall_a, wall_b) => {
-                wall_path.set_bit(wall_index(wall_a));
-                wall_path.set_bit(wall_index(wall_b));
+
+            let walls = walls_between(&position, &target);
+            let mut wall_path = wall_path;
+            match walls {
+                WallsBetween::Single(wall) => {
+                    wall_path.set_bit(wall_index(wall));
+                }
+                WallsBetween::Double(wall_a, wall_b) => {
+                    wall_path.set_bit(wall_index(wall_a));
+                    wall_path.set_bit(wall_index(wall_b));
+                }
             }
-        }
 
-        if (board_walls.clone() & wall_path).any() {
-            continue;
-        }
+            if (board_walls.clone() & wall_path).any() {
+                // println!("Can't go trough walls");
+                // println!("{:?}", board_walls);
+                // println!("{:?}", wall_path);
+                continue;
+            }
 
-        let result = dfs(
-            game,
-            board_walls,
-            all_wall_paths,
-            tile_path,
-            wall_path,
-            &target,
-            y_target,
-        );
-
-        if match result {
-            DfsResult::Unknown => false,
-            DfsResult::EarlyReturn => true,
-        } {
-            return DfsResult::EarlyReturn;
+            queue.push_back((target, tile_path, wall_path));
         }
     }
 
-    DfsResult::Unknown
-}
-
-pub enum DfsResult {
-    Unknown,
-    EarlyReturn,
+    wall_paths
 }
 
 fn tile_index(pos: &PiecePosition) -> usize {
@@ -265,56 +239,26 @@ fn walls_between(a: &PiecePosition, b: &PiecePosition) -> WallsBetween {
     }
 
     let orientation = match (b.x - a.x, b.y - a.y) {
-        (1, 0) => WallOrientation::Horizontal,
-        (0, 1) => WallOrientation::Vertical,
+        (1, 0) => WallOrientation::Vertical,
+        (0, 1) => WallOrientation::Horizontal,
         _ => panic!(),
     };
 
     match orientation {
         WallOrientation::Horizontal => {
-            if a.y == 0 {
-                return WallsBetween::Single(Wall {
-                    position: WallPosition { x: a.x, y: 0 },
-                    orientation,
-                });
-            }
-            if a.y == PIECE_GRID_HEIGHT - 1 {
-                return WallsBetween::Single(Wall {
-                    position: WallPosition {
-                        x: a.x,
-                        y: WALL_GRID_HEIGHT - 1,
-                    },
-                    orientation,
-                });
-            }
-            WallsBetween::Double(
-                Wall {
-                    position: WallPosition { x: a.x, y: a.y },
-                    orientation,
-                },
-                Wall {
-                    position: WallPosition { x: a.x, y: a.y - 1 },
-                    orientation,
-                },
-            )
-        }
-        WallOrientation::Vertical => {
             if a.x == 0 {
                 return WallsBetween::Single(Wall {
-                    position: WallPosition { x: 0, y: a.y },
+                    position: WallPosition { x: a.x, y: a.y },
                     orientation,
                 });
             }
             if a.x == PIECE_GRID_WIDTH - 1 {
                 return WallsBetween::Single(Wall {
-                    position: WallPosition {
-                        x: WALL_GRID_WIDTH - 1,
-                        y: a.y,
-                    },
+                    position: WallPosition { x: a.x - 1, y: a.y },
                     orientation,
                 });
             }
-            WallsBetween::Double(
+            return WallsBetween::Double(
                 Wall {
                     position: WallPosition { x: a.x, y: a.y },
                     orientation,
@@ -323,7 +267,31 @@ fn walls_between(a: &PiecePosition, b: &PiecePosition) -> WallsBetween {
                     position: WallPosition { x: a.x - 1, y: a.y },
                     orientation,
                 },
-            )
+            );
+        }
+        WallOrientation::Vertical => {
+            if a.y == 0 {
+                return WallsBetween::Single(Wall {
+                    position: WallPosition { x: a.x, y: a.y },
+                    orientation,
+                });
+            }
+            if a.y == PIECE_GRID_WIDTH - 1 {
+                return WallsBetween::Single(Wall {
+                    position: WallPosition { x: a.x, y: a.y - 1 },
+                    orientation,
+                });
+            }
+            return WallsBetween::Double(
+                Wall {
+                    position: WallPosition { x: a.x, y: a.y },
+                    orientation,
+                },
+                Wall {
+                    position: WallPosition { x: a.x, y: a.y - 1 },
+                    orientation,
+                },
+            );
         }
     }
 }

@@ -54,7 +54,7 @@ pub struct WallPosition {
 }
 
 #[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Walls(pub [[Option<WallOrientation>; WALL_GRID_WIDTH]; WALL_GRID_HEIGHT]);
+pub struct Walls(pub [[Option<WallOrientation>; WALL_GRID_HEIGHT]; WALL_GRID_WIDTH]);
 
 #[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Board {

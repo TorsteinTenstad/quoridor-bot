@@ -1,6 +1,7 @@
+use std::fmt;
 use std::ops::*;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub struct Bitset192 {
     pub a: u64, // bits   0..63
     pub b: u64, // bits  64..127
@@ -143,5 +144,26 @@ impl Bitset192 {
 
             None
         })
+    }
+}
+
+impl fmt::Debug for Bitset192 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Format c (highest bits), then b, then a (lowest bits)
+        let mut out = String::with_capacity(192);
+
+        for i in (0..64).rev() {
+            out.push(if (self.c >> i) & 1 == 1 { '1' } else { '0' });
+        }
+        out.push('_');
+        for i in (0..64).rev() {
+            out.push(if (self.b >> i) & 1 == 1 { '1' } else { '0' });
+        }
+        out.push('_');
+        for i in (0..64).rev() {
+            out.push(if (self.a >> i) & 1 == 1 { '1' } else { '0' });
+        }
+
+        write!(f, "Bitset192({})", out)
     }
 }
