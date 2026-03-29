@@ -15,8 +15,51 @@ use crate::{
 use std::{
     collections::HashMap,
     fmt::Display,
+    path::PathBuf,
     time::{Duration, Instant},
 };
+
+#[derive(clap_derive::Parser, Debug)]
+pub struct AbeCommand {
+    #[command(subcommand)]
+    pub cmd: SubCommand,
+}
+
+#[derive(clap_derive::Subcommand, Debug)]
+pub enum SubCommand {
+    Move {
+        #[arg(short, long, group = "time_control")]
+        depth: Option<usize>,
+
+        #[arg(short, long, group = "time_control")]
+        seconds: Option<u64>,
+    },
+    ShowMove {
+        #[arg(short, long, group = "time_control")]
+        depth: Option<usize>,
+
+        #[arg(short, long, group = "time_control")]
+        seconds: Option<u64>,
+    },
+    Eval {
+        #[arg()]
+        move_to_evaluate: Option<String>,
+
+        #[arg(short, long, group = "time_control")]
+        depth: Option<usize>,
+
+        #[arg(short, long, group = "time_control")]
+        seconds: Option<u64>,
+    },
+    ExportCache {
+        #[arg()]
+        file: PathBuf,
+    },
+    ImportCache {
+        #[arg()]
+        file: PathBuf,
+    },
+}
 
 pub const WHITE_LOSES_BLACK_WINS: isize = isize::MIN + 1;
 pub const WHITE_WINS_BLACK_LOSES: isize = -WHITE_LOSES_BLACK_WINS;

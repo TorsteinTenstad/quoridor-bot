@@ -5,7 +5,7 @@ use ggez::{
     {Context, ContextBuilder, GameResult},
 };
 use lib::{
-    agent::{Agent, AgentArg, AgentType, InputType, nn_bot::QuoridorNet},
+    agent::{Agent, AgentArg, AgentType, InputType, abe, nn_bot::QuoridorNet},
     commands::{self, Command, Session, execute_command, get_legal_command},
     data_model::{Game, Player},
     draw,
@@ -29,7 +29,7 @@ struct Args {
     #[clap(short='w', long, default_value_t = AgentArg::Manual)]
     player_white: AgentArg,
 
-    #[clap(short='b', long, default_value_t = AgentArg::Bot)]
+    #[clap(short='b', long, default_value_t = AgentArg::Abe)]
     player_black: AgentArg,
 
     #[clap(short, long)]
@@ -89,10 +89,16 @@ fn main() {
                     AgentType::NeuralNet => Command::AuxCommand(commands::AuxCommand::PlayNNMove {
                         temperature: args.temperature,
                     }),
-                    AgentType::Bot => Command::AuxCommand(commands::AuxCommand::PlayBotMove {
-                        depth: args.depth,
-                        seconds: args.seconds,
-                    }),
+                    AgentType::Abe => {
+                        Command::AuxCommand(commands::AuxCommand::Bot(commands::BotSubCommand {
+                            cmd: commands::BotCommand::Abe(abe::AbeCommand {
+                                cmd: abe::SubCommand::Move {
+                                    depth: args.depth,
+                                    seconds: args.seconds,
+                                },
+                            }),
+                        }))
+                    }
                     AgentType::Carlo(agent) => {
                         Command::PlayMove(agent.get_move(current_game_state))
                     }

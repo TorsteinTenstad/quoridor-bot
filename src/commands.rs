@@ -1,7 +1,7 @@
 use crate::{
     agent::{
         Agent,
-        bot::{Cache, get_bot_move},
+        abe::{self, AbeCommand, Cache, get_bot_move},
         carlo::{self, CarloCommand},
         nn_bot::{self, QuoridorNet},
         random::{self, RandomCommand},
@@ -16,20 +16,6 @@ use std::{collections::HashMap, path::PathBuf, time::Duration};
 pub enum AuxCommand {
     Bot(BotSubCommand),
     Reset,
-    BotMove {
-        #[arg(short, long, group = "time_control")]
-        depth: Option<usize>,
-
-        #[arg(short, long, group = "time_control")]
-        seconds: Option<u64>,
-    },
-    PlayBotMove {
-        #[arg(short, long, group = "time_control")]
-        depth: Option<usize>,
-
-        #[arg(short, long, group = "time_control")]
-        seconds: Option<u64>,
-    },
     PlayNNMove {
         #[arg(default_value_t = 0.0)]
         temperature: f32,
@@ -37,16 +23,6 @@ pub enum AuxCommand {
     Undo {
         #[arg(default_value_t = 1)]
         moves: usize,
-    },
-    Eval {
-        #[arg()]
-        move_to_evaluate: Option<String>,
-
-        #[arg(short, long, group = "time_control")]
-        depth: Option<usize>,
-
-        #[arg(short, long, group = "time_control")]
-        seconds: Option<u64>,
     },
     Export {
         #[arg(short, long)]
@@ -58,14 +34,6 @@ pub enum AuxCommand {
 
         #[arg(short, long, group = "source")]
         file: Option<PathBuf>,
-    },
-    ExportCache {
-        #[arg()]
-        file: PathBuf,
-    },
-    ImportCache {
-        #[arg()]
-        file: PathBuf,
     },
 }
 const AUX_COMMAND_NAME: &str = "";
@@ -80,6 +48,7 @@ pub struct BotSubCommand {
 pub enum BotCommand {
     Carlo(CarloCommand),
     Random(RandomCommand),
+    Abe(AbeCommand),
 }
 
 #[derive(clap_derive::Parser, Debug)]
@@ -128,34 +97,98 @@ pub fn execute_command(session: &mut Session, command: Command) {
             AuxCommand::Bot(bot_command) => match bot_command.cmd {
                 BotCommand::Carlo(cmd) => carlo::Carlo::default().execute(session, cmd.cmd),
                 BotCommand::Random(cmd) => random::Random::default().execute(session, cmd.cmd),
+                BotCommand::Abe(cmd) => match cmd.cmd {
+                    abe::SubCommand::ShowMove { depth, seconds } => {
+                        let (_, best_moves) = get_bot_move(
+                            current_game_state,
+                            player,
+                            depth,
+                            seconds.map(Duration::from_secs),
+                            &mut session.cache,
+                        );
+                        for eval in best_moves.iter().rev() {
+                            println!("{eval}");
+                        }
+                    }
+                    abe::SubCommand::Move { depth, seconds } => {
+                        let (duration, best_moves) = get_bot_move(
+                            current_game_state,
+                            player,
+                            depth,
+                            seconds.map(Duration::from_secs),
+                            &mut session.cache,
+                        );
+                        let m = best_moves.into_iter().last().unwrap().best_move;
+                        println!("{} {:?}", m, duration);
+
+                        let next_game_state = execute_move_unchecked(&current_game_state, &m);
+                        session.push(next_game_state, m);
+                    }
+                    abe::SubCommand::Eval {
+                        move_to_evaluate,
+                        depth,
+                        seconds,
+                    } => {
+                        if let Some(move_str) = move_to_evaluate {
+                            if let Some(m) = parse_player_move(&move_str) {
+                                if is_move_legal(current_game_state, player, &m) {
+                                    let next_game_state =
+                                        execute_move_unchecked(current_game_state, &m);
+                                    let (_, best_moves) = get_bot_move(
+                                        &next_game_state,
+                                        player,
+                                        depth,
+                                        seconds.map(Duration::from_secs),
+                                        &mut session.cache,
+                                    );
+                                    println!("{}", best_moves.last().unwrap().score);
+                                } else {
+                                    println!("Invalid move");
+                                }
+                            } else {
+                                println!("Could not parse move: {}", move_str);
+                            }
+                        } else {
+                            let (_, best_moves) = get_bot_move(
+                                current_game_state,
+                                player,
+                                depth,
+                                seconds.map(Duration::from_secs),
+                                &mut session.cache,
+                            );
+                            println!(
+                                "Best move evaluates to {}",
+                                best_moves.last().unwrap().score
+                            );
+                        }
+                    }
+                    abe::SubCommand::ExportCache { file: path } => {
+                        match std::fs::File::create(path) {
+                            Ok(file) => {
+                                serde_json::ser::to_writer_pretty(file, &session.cache).unwrap();
+                            }
+                            Err(e) => {
+                                println!("{:?}", e)
+                            }
+                        }
+                    }
+                    abe::SubCommand::ImportCache { file: path } => {
+                        match std::fs::File::open(path) {
+                            Ok(file) => match serde_json::de::from_reader::<_, Cache>(file) {
+                                Ok(cache) => session.cache = cache,
+                                Err(e) => {
+                                    println!("{:?}", e)
+                                }
+                            },
+                            Err(e) => {
+                                println!("{:?}", e)
+                            }
+                        }
+                    }
+                },
             },
             AuxCommand::Reset => *session = Session::new(HashMap::new()),
-            AuxCommand::BotMove { depth, seconds } => {
-                let (_, best_moves) = get_bot_move(
-                    current_game_state,
-                    player,
-                    depth,
-                    seconds.map(Duration::from_secs),
-                    &mut session.cache,
-                );
-                for eval in best_moves.iter().rev() {
-                    println!("{eval}");
-                }
-            }
-            AuxCommand::PlayBotMove { depth, seconds } => {
-                let (duration, best_moves) = get_bot_move(
-                    current_game_state,
-                    player,
-                    depth,
-                    seconds.map(Duration::from_secs),
-                    &mut session.cache,
-                );
-                let m = best_moves.into_iter().last().unwrap().best_move;
-                println!("{} {:?}", m, duration);
 
-                let next_game_state = execute_move_unchecked(&current_game_state, &m);
-                session.push(next_game_state, m);
-            }
             AuxCommand::PlayNNMove { temperature } => {
                 let m = nn_bot::get_move(
                     current_game_state,
@@ -164,7 +197,7 @@ pub fn execute_command(session: &mut Session, command: Command) {
                     temperature,
                 );
 
-                let next_game_state = execute_move_unchecked(&current_game_state, &m);
+                let next_game_state = execute_move_unchecked(current_game_state, &m);
                 session.push(next_game_state, m);
             }
             AuxCommand::Undo { moves } => {
@@ -174,43 +207,6 @@ pub fn execute_command(session: &mut Session, command: Command) {
                     }
                     session.game_states.pop();
                     session.moves.pop();
-                }
-            }
-            AuxCommand::Eval {
-                move_to_evaluate,
-                depth,
-                seconds,
-            } => {
-                if let Some(move_str) = move_to_evaluate {
-                    if let Some(m) = parse_player_move(&move_str) {
-                        if is_move_legal(current_game_state, player, &m) {
-                            let next_game_state = execute_move_unchecked(current_game_state, &m);
-                            let (_, best_moves) = get_bot_move(
-                                &next_game_state,
-                                player,
-                                depth,
-                                seconds.map(Duration::from_secs),
-                                &mut session.cache,
-                            );
-                            println!("{}", best_moves.last().unwrap().score);
-                        } else {
-                            println!("Invalid move");
-                        }
-                    } else {
-                        println!("Could not parse move: {}", move_str);
-                    }
-                } else {
-                    let (_, best_moves) = get_bot_move(
-                        current_game_state,
-                        player,
-                        depth,
-                        seconds.map(Duration::from_secs),
-                        &mut session.cache,
-                    );
-                    println!(
-                        "Best move evaluates to {}",
-                        best_moves.last().unwrap().score
-                    );
                 }
             }
             AuxCommand::Export { file } => {
@@ -254,25 +250,6 @@ pub fn execute_command(session: &mut Session, command: Command) {
                     }
                 }
             }
-            AuxCommand::ExportCache { file: path } => match std::fs::File::create(path) {
-                Ok(file) => {
-                    serde_json::ser::to_writer_pretty(file, &session.cache).unwrap();
-                }
-                Err(e) => {
-                    println!("{:?}", e)
-                }
-            },
-            AuxCommand::ImportCache { file: path } => match std::fs::File::open(path) {
-                Ok(file) => match serde_json::de::from_reader::<_, Cache>(file) {
-                    Ok(cache) => session.cache = cache,
-                    Err(e) => {
-                        println!("{:?}", e)
-                    }
-                },
-                Err(e) => {
-                    println!("{:?}", e)
-                }
-            },
         },
     }
 }

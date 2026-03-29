@@ -1,4 +1,4 @@
-pub mod bot;
+pub mod abe;
 pub mod carlo;
 pub mod nn_bot;
 pub mod random;
@@ -26,8 +26,8 @@ pub trait Agent: Default {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap_derive::ValueEnum)]
 pub enum AgentArg {
-    Bot,
     Carlo,
+    Abe,
     Manual,
     NeuralNet,
     Random,
@@ -49,8 +49,8 @@ pub enum InputType {
 }
 
 pub enum AgentType {
-    Bot,
     Carlo(carlo::Carlo),
+    Abe,
     NeuralNet,
     Random(random::Random),
 }
@@ -60,8 +60,8 @@ impl Display for InputType {
         match self {
             InputType::Manual => write!(f, "manual"),
             InputType::Automatic(agent) => match agent {
-                AgentType::Bot => write!(f, "bot"),
                 AgentType::Carlo(agent) => write!(f, "{}", agent.name()),
+                AgentType::Abe => write!(f, "abe"),
                 AgentType::NeuralNet => write!(f, "neural network"),
                 AgentType::Random(agent) => write!(f, "{}", agent.name()),
             },
@@ -74,7 +74,7 @@ impl From<AgentArg> for InputType {
         match value {
             AgentArg::Manual => InputType::Manual,
             AgentArg::Carlo => InputType::Automatic(AgentType::Carlo(carlo::Carlo::default())),
-            AgentArg::Bot => InputType::Automatic(AgentType::Bot),
+            AgentArg::Abe => InputType::Automatic(AgentType::Abe),
             AgentArg::NeuralNet => InputType::Automatic(AgentType::NeuralNet),
             AgentArg::Random => InputType::Automatic(AgentType::Random(random::Random::default())),
         }
