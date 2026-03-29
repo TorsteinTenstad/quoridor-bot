@@ -18,6 +18,10 @@ pub struct Random {
 impl Agent for Random {
     type Command = SubCommand;
 
+    fn name(&self) -> &str {
+        "random"
+    }
+
     fn get_move(&mut self, game: &Game) -> PlayerMove {
         let pos = game.board.player_position(game.player);
         let opponent_pos = game.board.player_position(game.player.opponent());
