@@ -5,7 +5,7 @@ use rand::{rngs::ThreadRng, seq::IteratorRandom};
 use crate::{
     agent::Agent,
     all_moves::ALL_MOVES,
-    commands::Session,
+    commands::{Session, parse_player_move},
     data_model::{Game, PlayerMove},
     game_logic::{execute_move_unchecked, is_move_legal},
 };
@@ -40,6 +40,18 @@ impl Agent for Carlo {
                 let board = board::Board::from(game);
                 println!("{:?}", board)
             }
+            SubCommand::PlaceWall { m } => {
+                if let Some(PlayerMove::PlaceWall {
+                    orientation,
+                    position,
+                }) = parse_player_move(&m)
+                {
+                    let game = session.game_states.last().unwrap();
+                    let mut board = board::Board::from(game);
+                    board.place_wall(position.x, position.y, orientation);
+                    println!("{:?}", board)
+                }
+            }
         }
     }
 }
@@ -53,5 +65,6 @@ pub struct CarloCommand {
 #[derive(clap_derive::Subcommand, Debug)]
 pub enum SubCommand {
     Move,
+    PlaceWall { m: String },
     DebugBoard,
 }
