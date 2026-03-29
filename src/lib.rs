@@ -1,6 +1,7 @@
 pub mod a_star;
 pub mod a_star_to_opponent;
 pub mod all_moves;
+pub mod args;
 pub mod bot;
 pub mod commands;
 pub mod data_model;

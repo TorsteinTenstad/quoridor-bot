@@ -1,6 +1,7 @@
 use crate::{
     a_star::a_star,
     a_star_to_opponent::a_star_to_opponent,
+    args::Args,
     bot::Bot,
     commands::parse_player_move,
     data_model::{
@@ -27,6 +28,13 @@ pub struct Abe {
     default_depth: Option<usize>,
     default_seconds: Option<u64>,
     cache: Cache,
+}
+
+impl Abe {
+    pub fn load_default_params(&mut self, args: &Args) {
+        self.default_depth = args.depth;
+        self.default_seconds = args.seconds;
+    }
 }
 
 #[derive(clap_derive::Subcommand, Debug)]

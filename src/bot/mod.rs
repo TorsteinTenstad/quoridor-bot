@@ -5,6 +5,7 @@ pub mod neural_net;
 pub mod random;
 
 use crate::{
+    args::Args,
     data_model::{Game, PlayerMove},
     session::Session,
 };
@@ -61,5 +62,10 @@ impl Bots {
             BotCommand::NeuralNet(cmd) => self.neural_net.execute(session, cmd),
             BotCommand::Abe(cmd) => self.abe.execute(session, cmd),
         }
+    }
+
+    pub fn load_default_params(&mut self, args: &Args) {
+        self.abe.load_default_params(args);
+        self.neural_net.load_default_params(args)
     }
 }

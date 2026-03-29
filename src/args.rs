@@ -1,0 +1,22 @@
+use crate::bot::BotType;
+
+#[derive(clap_derive::Parser, Debug)]
+pub struct Args {
+    #[arg(short, long, group = "time_control")]
+    pub depth: Option<usize>,
+
+    #[arg(short, long, group = "time_control")]
+    pub seconds: Option<u64>,
+
+    #[clap(short, long, default_value_t = 0.0)]
+    pub temperature: f32,
+
+    #[clap(short = 'w', long)]
+    pub player_white: Option<BotType>,
+
+    #[clap(short = 'b', long)]
+    pub player_black: Option<BotType>,
+
+    #[clap(short, long, default_value_t = 1000)]
+    pub window_size: usize,
+}

@@ -1,10 +1,10 @@
-use clap::Parser;
 use ggez::{
     conf::WindowMode,
     event::{self, EventHandler},
     {Context, ContextBuilder, GameResult},
 };
 use lib::{
+    args::Args,
     bot::{BotType, Bots},
     commands::{Command, execute_command, get_legal_command},
     data_model::{Game, Player},
@@ -15,33 +15,6 @@ use std::{
     fmt::{Debug, Display},
     sync::mpsc::{Receiver, channel},
 };
-
-#[derive(clap_derive::Parser, Debug)]
-struct Args {
-    #[arg(short, long, group = "time_control")]
-    depth: Option<usize>,
-
-    #[arg(short, long, group = "time_control")]
-    seconds: Option<u64>,
-
-    #[clap(short, long, default_value_t = 0.0)]
-    temperature: f32,
-
-    #[clap(short = 'w', long)]
-    player_white: Option<BotType>,
-
-    #[clap(short = 'b', long)]
-    player_black: Option<BotType>,
-
-    #[clap(short, long)]
-    end_after_moves: Option<usize>,
-
-    #[clap(short, long, default_value_t = 1000)]
-    window_size: usize,
-
-    #[clap(long)]
-    skip_initial_moves: bool,
-}
 
 pub enum InputType {
     Manual,
@@ -67,7 +40,7 @@ impl Display for InputType {
 }
 
 fn main() {
-    let args = Args::parse();
+    let args = <Args as clap::Parser>::parse();
 
     let (ctx, event_loop) = ContextBuilder::new("quoridor-bot", "Torstein Tenstad")
         .window_mode(
@@ -88,6 +61,8 @@ fn main() {
         let input_type_black = InputType::from(args.player_black);
         let mut bots_white = Bots::default();
         let mut bots_black = Bots::default();
+        bots_white.load_default_params(&args);
+        bots_black.load_default_params(&args);
 
         let mut session = Session::default();
         loop {

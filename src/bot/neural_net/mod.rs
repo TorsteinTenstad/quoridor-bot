@@ -3,6 +3,12 @@ pub struct NeuralNet {
     default_temperature: f32,
 }
 
+impl NeuralNet {
+    pub fn load_default_params(&mut self, args: &Args) {
+        self.default_temperature = args.temperature;
+    }
+}
+
 impl Default for NeuralNet {
     fn default() -> Self {
         Self {
@@ -48,6 +54,8 @@ impl super::Bot for NeuralNet {
 //
 // You can split this into modules later; kept single-file for clarity.
 
+use std::default;
+
 use burn;
 use burn::backend::NdArray;
 use burn::module::Module;
@@ -57,6 +65,7 @@ use burn::tensor::{Tensor, backend::Backend};
 use rand::{prelude::*, rng};
 
 use crate::all_moves::ALL_MOVES;
+use crate::args::Args;
 use crate::data_model::{
     Game, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, Player, PlayerMove, WALL_GRID_HEIGHT,
     WALL_GRID_WIDTH, WallOrientation,
