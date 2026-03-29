@@ -1,14 +1,21 @@
 use crate::{
-    agent::{Agents, BotCommand},
+    bot::{BotCommand, Bots},
     data_model::{Direction, Game, MovePiece, PlayerMove, WallOrientation, WallPosition},
-    game_logic::{execute_move_unchecked, is_move_legal},
+    game_logic::is_move_legal,
+    session::Session,
 };
 use clap::Parser;
 use std::path::PathBuf;
 
+pub enum Command {
+    PlayMove(PlayerMove),
+    AuxCommand(AuxCommand),
+}
+
 #[derive(clap_derive::Subcommand, Debug)]
 pub enum AuxCommand {
-    Bot(BotSubCommand),
+    #[command(subcommand)]
+    Bot(BotCommand),
     Reset,
     Undo {
         #[arg(default_value_t = 1)]
@@ -29,66 +36,30 @@ pub enum AuxCommand {
 const AUX_COMMAND_NAME: &str = "";
 
 #[derive(clap_derive::Parser, Debug)]
-pub struct BotSubCommand {
-    #[command(subcommand)]
-    pub cmd: BotCommand,
-}
-
-#[derive(clap_derive::Parser, Debug)]
 #[command(name = AUX_COMMAND_NAME)]
 struct AuxCommandParserHelper {
     #[command(subcommand)]
     command: AuxCommand,
 }
 
-pub enum Command {
-    PlayMove(PlayerMove),
-    AuxCommand(AuxCommand),
-}
-
-pub struct Session {
-    pub game_states: Vec<Game>,
-    pub moves: Vec<PlayerMove>,
-}
-
-impl Default for Session {
-    fn default() -> Self {
-        Self {
-            game_states: vec![Game::new()],
-            moves: Default::default(),
-        }
-    }
-}
-
-impl Session {
-    pub fn push(&mut self, game_state: Game, m: PlayerMove) {
-        self.game_states.push(game_state);
-        self.moves.push(m);
-    }
-}
-
-pub fn execute_command(agents: &mut Agents, session: &mut Session, command: Command) {
-    let current_game_state = session.game_states.last().unwrap();
+pub fn execute_command(bots: &mut Bots, session: &mut Session, command: Command) {
     match command {
-        Command::PlayMove(m) => {
-            let next_game_state = execute_move_unchecked(current_game_state, &m);
-            session.push(next_game_state, m);
-        }
+        Command::PlayMove(m) => session.make_move(m),
         Command::AuxCommand(aux_command) => match aux_command {
-            AuxCommand::Bot(bot_command) => agents.execute_bot_command(session, bot_command.cmd),
+            AuxCommand::Bot(bot_command) => bots.execute_bot_command(session, bot_command),
             AuxCommand::Reset => *session = Session::default(),
             AuxCommand::Undo { moves } => {
                 for _ in 0..moves {
-                    if session.game_states.len() == 1 {
+                    let Some(new_current) = session.game_history.pop() else {
                         break;
-                    }
-                    session.game_states.pop();
-                    session.moves.pop();
+                    };
+                    session.game = new_current;
+                    session.move_history.pop();
                 }
             }
             AuxCommand::Export { file } => {
                 let exported = session
-                    .moves
+                    .move_history
                     .iter()
                     .map(|m| format!("{m};"))
                     .collect::<String>();
@@ -121,9 +92,7 @@ pub fn execute_command(agents: &mut Agents, session: &mut Session, command: Comm
                 {
                     *session = Session::default();
                     for m in moves {
-                        let current_game_state = session.game_states.last().unwrap();
-                        let next_game_state = execute_move_unchecked(current_game_state, &m);
-                        session.push(next_game_state, m);
+                        session.make_move(m);
                     }
                 }
             }

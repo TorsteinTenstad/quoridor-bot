@@ -5,10 +5,11 @@ use ggez::{
     {Context, ContextBuilder, GameResult},
 };
 use lib::{
-    agent::{AgentType, Agents},
-    commands::{Command, Session, execute_command, get_legal_command},
+    bot::{BotType, Bots},
+    commands::{Command, execute_command, get_legal_command},
     data_model::{Game, Player},
     draw,
+    session::Session,
 };
 use std::{
     fmt::{Debug, Display},
@@ -27,10 +28,10 @@ struct Args {
     temperature: f32,
 
     #[clap(short = 'w', long)]
-    player_white: Option<AgentType>,
+    player_white: Option<BotType>,
 
     #[clap(short = 'b', long)]
-    player_black: Option<AgentType>,
+    player_black: Option<BotType>,
 
     #[clap(short, long)]
     end_after_moves: Option<usize>,
@@ -44,13 +45,13 @@ struct Args {
 
 pub enum InputType {
     Manual,
-    Automatic(AgentType),
+    Automatic(BotType),
 }
 
-impl From<Option<AgentType>> for InputType {
-    fn from(value: Option<AgentType>) -> Self {
+impl From<Option<BotType>> for InputType {
+    fn from(value: Option<BotType>) -> Self {
         match value {
-            Some(agent_type) => InputType::Automatic(agent_type),
+            Some(bot_type) => InputType::Automatic(bot_type),
             None => InputType::Manual,
         }
     }
@@ -59,7 +60,7 @@ impl From<Option<AgentType>> for InputType {
 impl Display for InputType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InputType::Automatic(agent_type) => agent_type.fmt(f),
+            InputType::Automatic(bot_type) => bot_type.fmt(f),
             InputType::Manual => write!(f, "manual"),
         }
     }
@@ -85,33 +86,31 @@ fn main() {
     std::thread::spawn(move || {
         let input_type_white = InputType::from(args.player_white);
         let input_type_black = InputType::from(args.player_black);
-        let mut agents_white = Agents::default();
-        let mut agents_black = Agents::default();
+        let mut bots_white = Bots::default();
+        let mut bots_black = Bots::default();
 
         let mut session = Session::default();
         loop {
-            let current_game_state = session.game_states.last().unwrap();
-            let player = current_game_state.player;
-            let (input_type, agents) = match player {
-                Player::White => (&input_type_white, &mut agents_white),
-                Player::Black => (&input_type_black, &mut agents_black),
+            let player = session.game.player;
+            let (input_type, bots) = match player {
+                Player::White => (&input_type_white, &mut bots_white),
+                Player::Black => (&input_type_black, &mut bots_black),
             };
             println!(
                 "{} ({}) to move. Walls: White: {}, Black: {}",
                 player.to_string(),
                 input_type,
-                current_game_state.walls_left[Player::White.as_index()],
-                current_game_state.walls_left[Player::Black.as_index()]
+                session.game.walls_left[Player::White.as_index()],
+                session.game.walls_left[Player::Black.as_index()]
             );
             let command = match input_type {
-                InputType::Manual => get_legal_command(current_game_state),
-                InputType::Automatic(agent_type) => Command::PlayMove(
-                    agents.get_move(session.game_states.last().unwrap(), agent_type),
-                ),
+                InputType::Manual => get_legal_command(&session.game),
+                InputType::Automatic(bot_type) => {
+                    Command::PlayMove(bots.get_move(&session.game, bot_type))
+                }
             };
-            execute_command(agents, &mut session, command);
-            tx.send(session.game_states.last().unwrap().clone())
-                .unwrap();
+            execute_command(bots, &mut session, command);
+            tx.send(session.game.clone()).unwrap();
         }
     });
 

@@ -1,51 +1,5 @@
-pub struct NeuralNet {
-    net: QuoridorNet,
-    default_temperature: f32,
-}
-
-impl Default for NeuralNet {
-    fn default() -> Self {
-        Self {
-            net: QuoridorNet::new(),
-            default_temperature: 0.5,
-        }
-    }
-}
-
-#[derive(clap_derive::Parser, Debug)]
-pub struct NeuralNetCommand {
-    #[command(subcommand)]
-    pub cmd: SubCommand,
-}
-
-#[derive(clap_derive::Subcommand, Debug)]
-pub enum SubCommand {
-    Move {
-        #[arg(short, long, default_value_t = 0.5)]
-        temperature: f32,
-    },
-}
-
-impl super::Agent for NeuralNet {
-    type Command = SubCommand;
-
-    fn get_move(&mut self, game: &Game) -> PlayerMove {
-        get_move(game, &self.net, self.default_temperature)
-    }
-
-    fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
-        match cmd {
-            Self::Command::Move { temperature } => {
-                let game = session.game_states.last().unwrap();
-                let m = get_move(game, &self.net, temperature);
-                let game = execute_move_unchecked(game, &m);
-                session.push(game, m);
-            }
-        }
-    }
-}
 // quoridor_az_scaffold.rs
-// Minimal, idiomatic Rust scaffold for an AlphaZero-style Quoridor agent.
+// Minimal, idiomatic Rust scaffold for an AlphaZero-style Quoridor bot.
 // Assumes you already have rules/state/move-gen. Plug them in via the GameAdapter trait below.
 //
 // What you get:
@@ -66,12 +20,11 @@ use burn::tensor::{Tensor, backend::Backend};
 use rand::{prelude::*, rng};
 
 use crate::all_moves::ALL_MOVES;
-use crate::commands::Session;
 use crate::data_model::{
     Game, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, Player, PlayerMove, WALL_GRID_HEIGHT,
     WALL_GRID_WIDTH, WallOrientation,
 };
-use crate::game_logic::{execute_move_unchecked, is_move_legal};
+use crate::game_logic::is_move_legal;
 
 // ===== 0) Domain adapter =====
 // Glue layer between YOUR existing rules/state and this scaffold.
@@ -96,7 +49,12 @@ fn action_from_id(action_id: ActionId) -> PlayerMove {
     ALL_MOVES.get(action_id as usize).unwrap().clone()
 }
 
-pub fn get_move(game: &Game, network: &QuoridorNet, temperature: f32) -> PlayerMove {
+pub fn get_move(
+    game: &Game,
+    network: &QuoridorNet,
+    player: Player,
+    temperature: f32,
+) -> PlayerMove {
     let mut rng = rng();
 
     let prediction = predict_batch(network, &[encode(game)]);
@@ -107,7 +65,7 @@ pub fn get_move(game: &Game, network: &QuoridorNet, temperature: f32) -> PlayerM
         .policy_logits
         .iter()
         .enumerate()
-        .filter(|(id, _)| is_move_legal(game, &action_from_id(*id as u16)))
+        .filter(|(id, _)| is_move_legal(game, player, &action_from_id(*id as u16)))
         .collect();
 
     // Apply temperature
@@ -139,13 +97,13 @@ fn encode(game: &Game) -> EncodedState {
     // player pawns
     for p in [Player::White, Player::Black] {
         let pos = game.board.player_position(p);
-        channels[p.as_index()][pos.y][pos.x] = 1.0;
+        channels[p.as_index()][pos.y()][pos.x()] = 1.0;
     }
 
     // walls (just fill in as 1.0 where a wall is placed)
     for x in 0..WALL_GRID_WIDTH {
         for y in 0..WALL_GRID_HEIGHT {
-            if let Some(o) = game.board.walls.0[x][y] {
+            if let Some(o) = game.board.walls[x][y] {
                 match o {
                     WallOrientation::Horizontal => channels[2][y][x] = 1.0,
                     WallOrientation::Vertical => channels[3][y][x] = 1.0,

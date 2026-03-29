@@ -65,7 +65,7 @@ impl Debug for Board {
             for square in row {
                 let _ = write!(f, "{:3}{:?} ", square.1, square.0);
             }
-            let _ = write!(f, "\n");
+            let _ = writeln!(f);
         }
         Ok(())
     }
@@ -77,7 +77,7 @@ impl From<&Game> for Board {
 
         let mut path = [[(Dir::Unreachable, 255); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
         let mut visited = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
-        let mut queue = [(0 as i8, 0 as i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
+        let mut queue = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
         let mut queue_len = 0;
 
         let player_pos = game.board.player_position(game.player);
@@ -153,7 +153,7 @@ impl Board {
     pub fn place_wall(&mut self, x: usize, y: usize, orientation: WallOrientation) {
         self.game.board.walls.0[x][y] = Some(orientation);
 
-        let mut invalid_q = [(0 as i8, 0 as i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
+        let mut invalid_q = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
         let mut invalid_q_len = 0;
 
         for ((x, y), towards_wall) in [(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)]
@@ -169,7 +169,7 @@ impl Board {
             }
         }
 
-        let mut search_q = [(0 as i8, 0 as i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
+        let mut search_q = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
         let mut search_q_len = 0;
 
         let mut i = 0;
@@ -193,23 +193,21 @@ impl Board {
             i += 1;
         }
 
-        for i in 0..invalid_q_len {
-            let (x, y) = invalid_q[i];
-
-            let mut best_neighbour: Option<((i8, i8), u8)> = None;
+        for (x, y) in invalid_q {
+            let mut best_neighbor: Option<((i8, i8), u8)> = None;
             for (dx, dy) in board_neighbors(&self.game, x, y) {
                 let nx = x + dx;
                 let ny = y + dy;
 
                 if self.path[ny as usize][nx as usize].0 != Dir::Unreachable {
                     let dist = self.path[ny as usize][nx as usize].1;
-                    if dist < best_neighbour.unwrap_or(((0, 0), 255)).1 {
-                        best_neighbour = Some(((nx, ny), dist));
+                    if dist < best_neighbor.unwrap_or(((0, 0), 255)).1 {
+                        best_neighbor = Some(((nx, ny), dist));
                     }
                 }
             }
 
-            if let Some(((nx, ny), _)) = best_neighbour {
+            if let Some(((nx, ny), _)) = best_neighbor {
                 search_q[search_q_len] = (nx, ny);
                 search_q_len += 1;
             }
@@ -220,7 +218,7 @@ impl Board {
     }
 }
 
-/// Returns iterator over (dx, dy) for valid neighbours on the board.
+/// Returns iterator over (dx, dy) for valid neighbors on the board.
 fn board_neighbors(game: &Game, x: i8, y: i8) -> impl Iterator<Item = (i8, i8)> {
     [(-1, 0), (1, 0), (0, -1), (0, 1)]
         .into_iter()

@@ -4,11 +4,11 @@ use std::thread::sleep;
 use rand::{Rng, rngs::ThreadRng, seq::IteratorRandom};
 
 use crate::{
-    agent::Agent,
     all_moves::ALL_MOVES,
-    commands::Session,
+    bot::Bot,
     data_model::{Game, PlayerMove},
-    game_logic::{all_move_piece_moves, execute_move_unchecked, is_move_legal},
+    game_logic::{all_move_piece_moves, is_move_legal},
+    session::Session,
 };
 
 #[derive(Default)]
@@ -16,8 +16,16 @@ pub struct Random {
     rng: ThreadRng,
 }
 
-impl Agent for Random {
-    type Command = SubCommand;
+#[derive(clap_derive::Subcommand, Debug)]
+pub enum RandomCommand {
+    Move {
+        #[arg(short, long, default_value_t = 0)]
+        seconds: u64,
+    },
+}
+
+impl Bot for Random {
+    type Command = RandomCommand;
 
     fn get_move(&mut self, game: &Game) -> PlayerMove {
         let pos = game.board.player_position(game.player);
@@ -39,28 +47,10 @@ impl Agent for Random {
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
         match cmd {
-            SubCommand::Move { seconds } => {
+            Self::Command::Move { seconds } => {
                 sleep(time::Duration::from_secs(seconds));
-
-                let game = session.game_states.last().unwrap();
-                let m = self.get_move(game);
-                let game = execute_move_unchecked(game, &m);
-                session.push(game, m);
+                session.make_move(self.get_move(&session.game))
             }
         }
     }
-}
-
-#[derive(clap_derive::Parser, Debug)]
-pub struct RandomCommand {
-    #[command(subcommand)]
-    pub cmd: SubCommand,
-}
-
-#[derive(clap_derive::Subcommand, Debug)]
-pub enum SubCommand {
-    Move {
-        #[arg(short, long, default_value_t = 0)]
-        seconds: u64,
-    },
 }

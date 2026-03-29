@@ -1,15 +1,15 @@
 mod walls;
 
 use crate::{
-    agent::Agent,
-    commands::Session,
+    bot::Bot,
+    session::Session,
     data_model::{Direction, Game, MovePiece, PlayerMove},
 };
 
 #[derive(Default)]
 pub struct Dedi {}
 
-impl Agent for Dedi {
+impl Bot for Dedi {
     type Command = SubCommand;
     
     fn get_move(&mut self, _: &Game) -> PlayerMove {
