@@ -5,9 +5,10 @@ use rand::{rngs::ThreadRng, seq::IteratorRandom};
 
 use crate::{
     agent::Agent,
+    all_moves::ALL_MOVES,
     commands::{Command, Session, execute_command},
     data_model::{Game, PlayerMove},
-    game_logic::{all_move_piece_moves, is_move_piece_legal_with_player_at_position},
+    game_logic::is_move_legal_with_player_at_position,
 };
 
 #[derive(Default)]
@@ -24,14 +25,12 @@ impl Agent for Random {
 
     fn get_move(&mut self, game: &Game) -> PlayerMove {
         let pos = game.board.player_position(game.player);
-        let opponent_pos = game.board.player_position(game.player.opponent());
-        let m = all_move_piece_moves(pos, opponent_pos)
-            .filter(|m| {
-                is_move_piece_legal_with_player_at_position(&game.board, game.player, pos, m)
-            })
+        ALL_MOVES
+            .iter()
+            .filter(|m| is_move_legal_with_player_at_position(&game, game.player, pos, m))
             .choose(&mut self.rng)
-            .expect("at least one move will always be valid");
-        PlayerMove::MovePiece(m)
+            .expect("at least one move will always be valid")
+            .clone()
     }
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
