@@ -1,13 +1,15 @@
 use crate::{
     a_star::a_star,
     a_star_to_opponent::a_star_to_opponent,
+    agent::Agent,
+    commands::{Session, parse_player_move},
     data_model::{
         Game, PIECE_GRID_HEIGHT, Player, PlayerMove, TOTAL_WALLS, WALL_GRID_HEIGHT,
         WALL_GRID_WIDTH, WallOrientation, WallPosition,
     },
     game_logic::{
-        all_move_piece_moves, execute_move_unchecked, is_move_piece_legal_with_player_at_position,
-        room_for_wall_placement,
+        all_move_piece_moves, execute_move_unchecked, is_move_legal,
+        is_move_piece_legal_with_player_at_position, room_for_wall_placement,
     },
     render_board,
     square_outline_iterator::SquareOutlineIterator,
@@ -18,6 +20,106 @@ use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
+
+#[derive(Default)]
+pub struct Abe {}
+
+impl Agent for Abe {
+    type Command = SubCommand;
+
+    fn get_move(&mut self, _game: &Game) -> PlayerMove {
+        todo!()
+    }
+
+    fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
+        let current_game_state = session.game_states.last().unwrap();
+        let player = current_game_state.player;
+        match cmd {
+            SubCommand::ShowMove { depth, seconds } => {
+                let (_, best_moves) = get_bot_move(
+                    current_game_state,
+                    player,
+                    depth,
+                    seconds.map(Duration::from_secs),
+                    &mut session.cache,
+                );
+                for eval in best_moves.iter().rev() {
+                    println!("{eval}");
+                }
+            }
+            SubCommand::Move { depth, seconds } => {
+                let (duration, best_moves) = get_bot_move(
+                    current_game_state,
+                    player,
+                    depth,
+                    seconds.map(Duration::from_secs),
+                    &mut session.cache,
+                );
+                let m = best_moves.into_iter().last().unwrap().best_move;
+                println!("{} {:?}", m, duration);
+
+                let next_game_state = execute_move_unchecked(current_game_state, &m);
+                session.push(next_game_state, m);
+            }
+            SubCommand::Eval {
+                move_to_evaluate,
+                depth,
+                seconds,
+            } => {
+                if let Some(move_str) = move_to_evaluate {
+                    if let Some(m) = parse_player_move(&move_str) {
+                        if is_move_legal(current_game_state, player, &m) {
+                            let next_game_state = execute_move_unchecked(current_game_state, &m);
+                            let (_, best_moves) = get_bot_move(
+                                &next_game_state,
+                                player,
+                                depth,
+                                seconds.map(Duration::from_secs),
+                                &mut session.cache,
+                            );
+                            println!("{}", best_moves.last().unwrap().score);
+                        } else {
+                            println!("Invalid move");
+                        }
+                    } else {
+                        println!("Could not parse move: {}", move_str);
+                    }
+                } else {
+                    let (_, best_moves) = get_bot_move(
+                        current_game_state,
+                        player,
+                        depth,
+                        seconds.map(Duration::from_secs),
+                        &mut session.cache,
+                    );
+                    println!(
+                        "Best move evaluates to {}",
+                        best_moves.last().unwrap().score
+                    );
+                }
+            }
+            SubCommand::ExportCache { file: path } => match std::fs::File::create(path) {
+                Ok(file) => {
+                    serde_json::ser::to_writer_pretty(file, &session.cache).unwrap();
+                }
+                Err(e) => {
+                    println!("{:?}", e)
+                }
+            },
+            SubCommand::ImportCache { file: path } => match std::fs::File::open(path) {
+                Ok(file) => match serde_json::de::from_reader::<_, Cache>(file) {
+                    Ok(cache) => session.cache = cache,
+                    Err(e) => {
+                        println!("{:?}", e)
+                    }
+                },
+                Err(e) => {
+                    println!("{:?}", e)
+                }
+            },
+        }
+    }
+}
 
 #[derive(clap_derive::Parser, Debug)]
 pub struct AbeCommand {

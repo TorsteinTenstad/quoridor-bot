@@ -169,7 +169,7 @@ pub fn is_move_legal_with_player_at_position(
         } => {
             let blocks_path = |player_to_block_check: Player| {
                 let next_game_state = execute_move_unchecked(
-                    &game,
+                    game,
                     &PlayerMove::PlaceWall {
                         orientation: *orientation,
                         position: position.clone(),

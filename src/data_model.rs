@@ -43,7 +43,7 @@ pub struct PiecePosition {
 
 impl PiecePosition {
     pub fn new(x: usize, y: usize) -> Self {
-        Self { x: x, y: y }
+        Self { x, y }
     }
 }
 
