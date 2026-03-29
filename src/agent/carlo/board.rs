@@ -5,7 +5,7 @@ use crate::data_model::{
     WallOrientation,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Dir {
     Unreachable,
     Goal,
@@ -29,12 +29,12 @@ impl Debug for Dir {
 }
 
 pub struct Board {
-    pub board: [[(Dir, u8); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
+    path: [[(Dir, u8); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
 }
 
 impl Debug for Board {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for row in self.board {
+        for row in self.path {
             for square in row {
                 let _ = write!(f, "{:3}{:?} ", square.1, square.0);
             }
@@ -46,7 +46,9 @@ impl Debug for Board {
 
 impl From<&Game> for Board {
     fn from(game: &Game) -> Self {
-        let mut board = [[(Dir::Unreachable, 255); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
+        let game = game.clone();
+
+        let mut path = [[(Dir::Unreachable, 255); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
         let mut visited = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
         let mut queue = [(0 as i8, 0 as i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
         let mut queue_len = 0;
@@ -60,10 +62,10 @@ impl From<&Game> for Board {
             };
             for x in 0..PIECE_GRID_HEIGHT {
                 if x == player_pos.x && y == player_pos.y {
-                    return Board { board };
+                    return Board { path };
                 }
 
-                board[y][x] = (Dir::Goal, 0);
+                path[y][x] = (Dir::Goal, 0);
                 visited[y][x] = true;
                 queue[queue_len] = (x as i8, y as i8);
                 queue_len += 1;
@@ -71,46 +73,18 @@ impl From<&Game> for Board {
         }
 
         let mut i = 0;
-        while i < queue_len {
+        'queue: while i < queue_len {
             let (x, y) = queue[i];
-
-            'outer: for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+            for (dx, dy) in board_neighbors(&game, x, y) {
                 let nx = x + dx;
                 let ny = y + dy;
-                if nx < 0 || nx >= PIECE_GRID_WIDTH as i8 || ny < 0 || ny >= PIECE_GRID_HEIGHT as i8
-                {
-                    // Invalid out of bounds move.
-                    continue;
-                }
 
                 if visited[ny as usize][nx as usize] {
                     continue;
                 }
 
-                let orientation = match (dx, dy) {
-                    (0, _) => WallOrientation::Horizontal,
-                    (_, 0) => WallOrientation::Vertical,
-                    _ => unreachable!(),
-                };
-
-                let wall_xs = [x - 1 + (dx == 1) as i8, x - (dx == -1) as i8];
-                let wall_ys = [y - 1 + (dy == 1) as i8, y - (dy == -1) as i8];
-                for (wx, wy) in wall_xs.into_iter().zip(wall_ys.into_iter()) {
-                    if wx < 0
-                        || wx >= WALL_GRID_WIDTH as i8
-                        || wy < 0
-                        || wy >= WALL_GRID_HEIGHT as i8
-                    {
-                        // Out of bounds wall cannot exist / block movement.
-                        continue;
-                    }
-                    if game.board.walls.0[wx as usize][wy as usize] == Some(orientation) {
-                        continue 'outer;
-                    }
-                }
-
-                let dist = board[y as usize][x as usize].1 + 1;
-                board[ny as usize][nx as usize] = match (dx, dy) {
+                let dist = path[y as usize][x as usize].1 + 1;
+                path[ny as usize][nx as usize] = match (dx, dy) {
                     (-1, _) => (Dir::Right, dist),
                     (1, _) => (Dir::Left, dist),
                     (_, -1) => (Dir::Down, dist),
@@ -119,7 +93,7 @@ impl From<&Game> for Board {
                 };
 
                 if nx as usize == player_pos.x && y as usize == player_pos.y {
-                    return Board { board };
+                    break 'queue;
                 }
 
                 visited[ny as usize][nx as usize] = true;
@@ -130,6 +104,49 @@ impl From<&Game> for Board {
             i += 1;
         }
 
-        return Board { board };
+        return Board { path };
     }
+}
+
+/// Returns iterator over (dx, dy) for valid neighbours on the board.
+fn board_neighbors(game: &Game, x: i8, y: i8) -> impl Iterator<Item = (i8, i8)> {
+    [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        .into_iter()
+        .filter_map(move |(dx, dy)| {
+            let nx = x + dx;
+            let ny = y + dy;
+
+            if nx < 0 || nx >= PIECE_GRID_WIDTH as i8 || ny < 0 || ny >= PIECE_GRID_HEIGHT as i8 {
+                // Invalid out of bounds move.
+                return None;
+            }
+
+            if wall_blocks(game, x, y, dx, dy) {
+                return None;
+            }
+
+            Some((dx, dy))
+        })
+}
+
+fn wall_blocks(game: &Game, x: i8, y: i8, dx: i8, dy: i8) -> bool {
+    let orientation = match (dx, dy) {
+        (0, _) => WallOrientation::Horizontal,
+        (_, 0) => WallOrientation::Vertical,
+        _ => unreachable!(),
+    };
+
+    let wall_xs = [x - 1 + (dx == 1) as i8, x - (dx == -1) as i8];
+    let wall_ys = [y - 1 + (dy == 1) as i8, y - (dy == -1) as i8];
+    for (wx, wy) in wall_xs.into_iter().zip(wall_ys.into_iter()) {
+        if wx < 0 || wx >= WALL_GRID_WIDTH as i8 || wy < 0 || wy >= WALL_GRID_HEIGHT as i8 {
+            // Out of bounds wall cannot exist / block movement.
+            continue;
+        }
+        if game.board.walls.0[wx as usize][wy as usize] == Some(orientation) {
+            return true;
+        }
+    }
+
+    false
 }
