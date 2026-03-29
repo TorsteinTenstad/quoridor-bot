@@ -49,12 +49,7 @@ fn action_from_id(action_id: ActionId) -> PlayerMove {
     ALL_MOVES.get(action_id as usize).unwrap().clone()
 }
 
-pub fn get_move(
-    game: &Game,
-    network: &QuoridorNet,
-    player: Player,
-    temperature: f32,
-) -> PlayerMove {
+pub fn get_move(game: &Game, network: &QuoridorNet, temperature: f32) -> PlayerMove {
     let mut rng = rng();
 
     let prediction = predict_batch(network, &[encode(game)]);
@@ -65,7 +60,7 @@ pub fn get_move(
         .policy_logits
         .iter()
         .enumerate()
-        .filter(|(id, _)| is_move_legal(game, player, &action_from_id(*id as u16)))
+        .filter(|(id, _)| is_move_legal(game, &action_from_id(*id as u16)))
         .collect();
 
     // Apply temperature
@@ -103,7 +98,7 @@ fn encode(game: &Game) -> EncodedState {
     // walls (just fill in as 1.0 where a wall is placed)
     for x in 0..WALL_GRID_WIDTH {
         for y in 0..WALL_GRID_HEIGHT {
-            if let Some(o) = game.board.walls[x][y] {
+            if let Some(o) = game.board.walls.0[x][y] {
                 match o {
                     WallOrientation::Horizontal => channels[2][y][x] = 1.0,
                     WallOrientation::Vertical => channels[3][y][x] = 1.0,

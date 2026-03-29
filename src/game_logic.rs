@@ -1,8 +1,8 @@
 use crate::{
     a_star::a_star,
     data_model::{
-        Board, Direction, Game, MovePiece, PIECE_GRID_HEIGHT, PiecePosition, Player, PlayerMove,
-        WALL_GRID_HEIGHT, WALL_GRID_WIDTH, WallOrientation,
+        Direction, Game, MovePiece, PIECE_GRID_HEIGHT, PiecePosition, Player, PlayerMove,
+        WALL_GRID_HEIGHT, WALL_GRID_WIDTH, WallOrientation, Walls,
     },
 };
 
@@ -20,7 +20,7 @@ fn execute_move_unchecked_inplace(game: &mut Game, player_move: &PlayerMove) {
             orientation,
             position,
         } => {
-            game.board.walls[position.x][position.y] = Some(*orientation);
+            game.board.walls.0[position.x][position.y] = Some(*orientation);
             game.walls_left[player.as_index()] -= 1;
         }
         PlayerMove::MovePiece(move_piece) => {
@@ -35,30 +35,30 @@ fn execute_move_unchecked_inplace(game: &mut Game, player_move: &PlayerMove) {
     game.player = player.opponent();
 }
 
-pub fn is_move_legal(game: &Game, player: Player, player_move: &PlayerMove) -> bool {
-    is_move_legal_with_player_at_position(
-        game,
-        player,
-        game.board.player_position(player),
-        player_move,
+pub fn is_move_piece_legal(game: &Game, move_piece: &MovePiece) -> bool {
+    is_move_piece_legal_with_players_at_positions(
+        &game.board.walls,
+        game.board.player_position(game.player),
+        game.board.player_position(game.player.opponent()),
+        move_piece,
     )
 }
-pub fn is_move_piece_legal_with_player_at_position(
-    board: &Board,
-    player: Player,
+pub fn is_move_piece_legal_with_players_at_positions(
+    walls: &Walls,
     player_position: &PiecePosition,
+    opponent_position: &PiecePosition,
     move_piece: &MovePiece,
 ) -> bool {
     if is_move_direction_legal_with_player_at_position(
-        board,
+        walls,
         player_position,
         &move_piece.direction,
     ) {
         let new_position =
             new_position_after_direction_unchecked(player_position, move_piece.direction);
-        if new_position == *board.player_position(player.opponent()) {
+        if new_position == *opponent_position {
             is_move_direction_legal_with_player_at_position(
-                board,
+                walls,
                 &new_position,
                 &move_piece.direction_on_collision,
             )
@@ -71,19 +71,19 @@ pub fn is_move_piece_legal_with_player_at_position(
 }
 
 pub fn is_move_direction_legal_with_player_at_position(
-    board: &Board,
+    walls: &Walls,
     player_position: &PiecePosition,
     direction: &Direction,
 ) -> bool {
     match direction {
         Direction::Up => {
             player_position.y > 0
-                && !board.wall_at(
+                && !walls.wall_at(
                     WallOrientation::Horizontal,
                     player_position.x as isize - 1,
                     player_position.y as isize - 1,
                 )
-                && !board.wall_at(
+                && !walls.wall_at(
                     WallOrientation::Horizontal,
                     player_position.x as isize,
                     player_position.y as isize - 1,
@@ -91,12 +91,12 @@ pub fn is_move_direction_legal_with_player_at_position(
         }
         Direction::Down => {
             player_position.y < PIECE_GRID_HEIGHT - 1
-                && !board.wall_at(
+                && !walls.wall_at(
                     WallOrientation::Horizontal,
                     player_position.x as isize - 1,
                     player_position.y as isize,
                 )
-                && !board.wall_at(
+                && !walls.wall_at(
                     WallOrientation::Horizontal,
                     player_position.x as isize,
                     player_position.y as isize,
@@ -104,12 +104,12 @@ pub fn is_move_direction_legal_with_player_at_position(
         }
         Direction::Left => {
             player_position.x > 0
-                && !board.wall_at(
+                && !walls.wall_at(
                     WallOrientation::Vertical,
                     player_position.x as isize - 1,
                     player_position.y as isize,
                 )
-                && !board.wall_at(
+                && !walls.wall_at(
                     WallOrientation::Vertical,
                     player_position.x as isize - 1,
                     player_position.y as isize - 1,
@@ -117,12 +117,12 @@ pub fn is_move_direction_legal_with_player_at_position(
         }
         Direction::Right => {
             player_position.x < PIECE_GRID_HEIGHT - 1
-                && !board.wall_at(
+                && !walls.wall_at(
                     WallOrientation::Vertical,
                     player_position.x as isize,
                     player_position.y as isize,
                 )
-                && !board.wall_at(
+                && !walls.wall_at(
                     WallOrientation::Vertical,
                     player_position.x as isize,
                     player_position.y as isize - 1,
@@ -132,7 +132,7 @@ pub fn is_move_direction_legal_with_player_at_position(
 }
 
 pub fn room_for_wall_placement(
-    board: &Board,
+    walls: &Walls,
     orientation: WallOrientation,
     x: isize,
     y: isize,
@@ -141,26 +141,21 @@ pub fn room_for_wall_placement(
         && y >= 0
         && x < WALL_GRID_WIDTH as isize
         && y < WALL_GRID_HEIGHT as isize
-        && board.walls[x as usize][y as usize].is_none()
+        && walls.0[x as usize][y as usize].is_none()
         && match orientation {
             WallOrientation::Horizontal => [(-1, 0), (1, 0)],
             WallOrientation::Vertical => [(0, -1), (0, 1)],
         }
         .iter()
-        .all(|(dx, dy)| !board.wall_at(orientation, x + dx, y + dy))
+        .all(|(dx, dy)| !walls.wall_at(orientation, x + dx, y + dy))
 }
 
-pub fn is_move_legal_with_player_at_position(
-    game: &Game,
-    player: Player,
-    player_position: &PiecePosition,
-    player_move: &PlayerMove,
-) -> bool {
+pub fn is_move_legal(game: &Game, player_move: &PlayerMove) -> bool {
     match player_move {
-        PlayerMove::MovePiece(move_piece) => is_move_piece_legal_with_player_at_position(
-            &game.board,
-            player,
-            player_position,
+        PlayerMove::MovePiece(move_piece) => is_move_piece_legal_with_players_at_positions(
+            &game.board.walls,
+            game.board.player_position(game.player),
+            game.board.player_position(game.player.opponent()),
             move_piece,
         ),
         PlayerMove::PlaceWall {
@@ -177,15 +172,15 @@ pub fn is_move_legal_with_player_at_position(
                 );
                 a_star(&next_game_state.board, player_to_block_check).is_none()
             };
-            game.walls_left[player.as_index()] > 0
+            game.walls_left[game.player.as_index()] > 0
                 && room_for_wall_placement(
-                    &game.board,
+                    &game.board.walls,
                     *orientation,
                     position.x as isize,
                     position.y as isize,
                 )
-                && !blocks_path(player)
-                && !blocks_path(player.opponent())
+                && !blocks_path(game.player)
+                && !blocks_path(game.player.opponent())
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::data_model::{Board, Direction, PiecePosition, Player};
+use crate::data_model::{Board, Direction, PiecePosition, Player, Walls};
 use crate::game_logic::{
     is_move_direction_legal_with_player_at_position, new_position_after_direction_unchecked,
 };
@@ -26,7 +26,7 @@ pub fn a_star_to_opponent(board: &Board, player: Player) -> Option<Vec<PiecePosi
         if heuristic(&current, board.player_position(player.opponent())) == 0 {
             return Some(reconstruct_path(&came_from, &current));
         }
-        for neighbor in neighbors(board, &current) {
+        for neighbor in neighbors(&board.walls, &current) {
             let tentative_g_score = g_score[&current] + 1;
             if tentative_g_score < *g_score.get(&neighbor).unwrap_or(&usize::MAX) {
                 came_from.insert(neighbor.clone(), current.clone());
@@ -57,10 +57,10 @@ fn reconstruct_path(
     total_path
 }
 
-fn neighbors(board: &Board, player_position: &PiecePosition) -> Vec<PiecePosition> {
+fn neighbors(walls: &Walls, player_position: &PiecePosition) -> Vec<PiecePosition> {
     Direction::iter()
         .filter(|direction| {
-            is_move_direction_legal_with_player_at_position(board, player_position, direction)
+            is_move_direction_legal_with_player_at_position(walls, player_position, direction)
         })
         .map(|direction| new_position_after_direction_unchecked(player_position, direction))
         .collect()

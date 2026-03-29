@@ -11,10 +11,10 @@ pub fn render_board(board: &Board) -> String {
         let draw_vertical_wall = |x: usize| {
             let wall_above = x < WALL_GRID_WIDTH
                 && y > 0
-                && matches!(board.walls[x][y - 1], Some(WallOrientation::Vertical));
+                && matches!(board.walls.0[x][y - 1], Some(WallOrientation::Vertical));
             let wall_below = x < WALL_GRID_WIDTH
                 && y < WALL_GRID_HEIGHT
-                && matches!(board.walls[x][y], Some(WallOrientation::Vertical));
+                && matches!(board.walls.0[x][y], Some(WallOrientation::Vertical));
             if wall_below || wall_above { '│' } else { ' ' }
         };
         for x in 0..PIECE_GRID_WIDTH {
@@ -41,13 +41,13 @@ pub fn render_board(board: &Board) -> String {
             for x in 0..PIECE_GRID_WIDTH {
                 let wall_right = y < WALL_GRID_WIDTH
                     && x < WALL_GRID_HEIGHT
-                    && matches!(board.walls[x][y], Some(WallOrientation::Horizontal));
+                    && matches!(board.walls.0[x][y], Some(WallOrientation::Horizontal));
                 let wall_left = y < WALL_GRID_WIDTH
                     && x > 0
-                    && matches!(board.walls[x - 1][y], Some(WallOrientation::Horizontal));
+                    && matches!(board.walls.0[x - 1][y], Some(WallOrientation::Horizontal));
                 let vertical_wall = x < WALL_GRID_WIDTH
                     && y < WALL_GRID_HEIGHT
-                    && matches!(board.walls[x][y], Some(WallOrientation::Vertical));
+                    && matches!(board.walls.0[x][y], Some(WallOrientation::Vertical));
                 let vertical_wall_char = if vertical_wall { '│' } else { ' ' };
                 let write_indices = x < WALL_GRID_WIDTH && !vertical_wall;
                 let (x_str, y_str) = if write_indices {

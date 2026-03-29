@@ -84,7 +84,7 @@ fn main() {
                 current_game_state.walls_left[Player::Black.as_index()]
             );
             let command = match agent {
-                InputType::Manual => get_legal_command(current_game_state, player),
+                InputType::Manual => get_legal_command(current_game_state),
                 InputType::Automatic(agent) => match agent {
                     AgentType::NeuralNet => Command::AuxCommand(commands::AuxCommand::PlayNNMove {
                         temperature: args.temperature,

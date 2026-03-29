@@ -8,7 +8,7 @@ use crate::{
     all_moves::ALL_MOVES,
     commands::{Command, Session, execute_command},
     data_model::{Game, PlayerMove},
-    game_logic::{all_move_piece_moves, is_move_legal_with_player_at_position},
+    game_logic::{all_move_piece_moves, is_move_legal},
 };
 
 #[derive(Default)]
@@ -35,7 +35,7 @@ impl Agent for Random {
             .chain(all_move_iter.into_iter().flatten());
 
         moves
-            .filter(|m| is_move_legal_with_player_at_position(game, game.player, pos, m))
+            .filter(|m| is_move_legal(game, m))
             .choose(&mut self.rng)
             .expect("at least one move will always be valid")
             .clone()

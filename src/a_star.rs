@@ -1,6 +1,6 @@
-use crate::data_model::{Board, PIECE_GRID_HEIGHT, PiecePosition, Player};
+use crate::data_model::{Board, PIECE_GRID_HEIGHT, PiecePosition, Player, Walls};
 use crate::game_logic::{
-    all_move_piece_moves, is_move_piece_legal_with_player_at_position,
+    all_move_piece_moves, is_move_piece_legal_with_players_at_positions,
     new_position_after_move_piece_unchecked,
 };
 use crate::priority_queue::PriorityQueue;
@@ -15,6 +15,7 @@ pub fn heuristic(pos: &PiecePosition, player: Player) -> usize {
 
 pub fn a_star(board: &Board, player: Player) -> Option<Vec<PiecePosition>> {
     let start = board.player_position(player).clone();
+    let opponent_position = board.player_position(player.opponent());
     let mut open_set = PriorityQueue::new();
     let mut came_from = HashMap::<PiecePosition, PiecePosition>::new();
     let mut g_score = HashMap::<PiecePosition, usize>::new();
@@ -28,7 +29,7 @@ pub fn a_star(board: &Board, player: Player) -> Option<Vec<PiecePosition>> {
         if heuristic(&current, player) == 0 {
             return Some(reconstruct_path(&came_from, &current));
         }
-        for neighbor in neighbors(board, player, &current) {
+        for neighbor in neighbors(&board.walls, &current, opponent_position) {
             let tentative_g_score = g_score[&current] + 1;
             if tentative_g_score < *g_score.get(&neighbor).unwrap_or(&usize::MAX) {
                 came_from.insert(neighbor.clone(), current.clone());
@@ -59,14 +60,18 @@ fn reconstruct_path(
 }
 
 fn neighbors(
-    board: &Board,
-    player: Player,
+    walls: &Walls,
     player_position: &PiecePosition,
+    opponent_position: &PiecePosition,
 ) -> impl Iterator<Item = PiecePosition> {
-    let opponent_position = board.player_position(player.opponent());
     all_move_piece_moves(player_position, opponent_position)
         .filter(move |move_piece| {
-            is_move_piece_legal_with_player_at_position(board, player, player_position, move_piece)
+            is_move_piece_legal_with_players_at_positions(
+                walls,
+                player_position,
+                opponent_position,
+                move_piece,
+            )
         })
         .map(|move_piece| {
             new_position_after_move_piece_unchecked(player_position, &move_piece, opponent_position)
@@ -81,7 +86,7 @@ mod tests {
     #[test]
     fn single_wall_test() {
         let mut game = Game::new();
-        game.board.walls[3][2] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[3][2] = Some(WallOrientation::Horizontal);
         let path = a_star(&game.board, Player::White);
         assert!(path.is_some());
         let path = path.unwrap();
@@ -106,12 +111,12 @@ mod tests {
         let mut game = Game::new();
         game.board.player_positions[Player::White.as_index()] = PiecePosition::new(4, 4);
         game.board.player_positions[Player::Black.as_index()] = PiecePosition::new(3, 4);
-        game.board.walls[2][3] = Some(WallOrientation::Vertical);
-        game.board.walls[3][3] = Some(WallOrientation::Vertical);
-        game.board.walls[2][5] = Some(WallOrientation::Vertical);
-        game.board.walls[4][3] = Some(WallOrientation::Horizontal);
-        game.board.walls[4][4] = Some(WallOrientation::Horizontal);
-        game.board.walls[5][5] = Some(WallOrientation::Vertical);
+        game.board.walls.0[2][3] = Some(WallOrientation::Vertical);
+        game.board.walls.0[3][3] = Some(WallOrientation::Vertical);
+        game.board.walls.0[2][5] = Some(WallOrientation::Vertical);
+        game.board.walls.0[4][3] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[4][4] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[5][5] = Some(WallOrientation::Vertical);
         let path = a_star(&game.board, Player::White);
         assert!(path.is_some());
     }

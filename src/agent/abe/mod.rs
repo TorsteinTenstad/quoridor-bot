@@ -8,8 +8,8 @@ use crate::{
         WALL_GRID_WIDTH, WallOrientation, WallPosition,
     },
     game_logic::{
-        all_move_piece_moves, execute_move_unchecked, is_move_legal,
-        is_move_piece_legal_with_player_at_position, room_for_wall_placement,
+        all_move_piece_moves, execute_move_unchecked, is_move_legal, is_move_piece_legal,
+        is_move_piece_legal_with_players_at_positions, room_for_wall_placement,
     },
     render_board,
     square_outline_iterator::SquareOutlineIterator,
@@ -68,7 +68,7 @@ impl Agent for Abe {
             } => {
                 if let Some(move_str) = move_to_evaluate {
                     if let Some(m) = parse_player_move(&move_str) {
-                        if is_move_legal(current_game_state, player, &m) {
+                        if is_move_legal(current_game_state, &m) {
                             let next_game_state = execute_move_unchecked(current_game_state, &m);
                             let (_, best_moves) = get_bot_move(
                                 &next_game_state,
@@ -345,7 +345,7 @@ fn alpha_beta(
                 .into_iter()
                 .chain(moves_ordered_by_heuristic_quality(game, player))
             {
-                let child_game_state = execute_move_unchecked(&game, &player_move);
+                let child_game_state = execute_move_unchecked(game, &player_move);
                 if a_star(&child_game_state.board, player).is_none()
                     || a_star(&child_game_state.board, player.opponent()).is_none()
                 {
@@ -402,7 +402,7 @@ fn alpha_beta(
                 .into_iter()
                 .chain(moves_ordered_by_heuristic_quality(game, player))
             {
-                let child_game_state = execute_move_unchecked(&game, &player_move);
+                let child_game_state = execute_move_unchecked(game, &player_move);
                 if a_star(&child_game_state.board, player).is_none()
                     || a_star(&child_game_state.board, player.opponent()).is_none()
                 {
@@ -460,14 +460,7 @@ fn moves_ordered_by_heuristic_quality(game: &Game, player: Player) -> Vec<Player
     let opponent_position = game.board.player_position(player.opponent());
 
     let mut moves: Vec<PlayerMove> = all_move_piece_moves(player_position, opponent_position)
-        .filter(move |move_piece| {
-            is_move_piece_legal_with_player_at_position(
-                &game.board,
-                player,
-                player_position,
-                move_piece,
-            )
-        })
+        .filter(move |move_piece| is_move_piece_legal(game, move_piece))
         .map(PlayerMove::MovePiece)
         .collect();
     if game.walls_left[player.as_index()] > 0 {
@@ -494,7 +487,7 @@ fn moves_ordered_by_heuristic_quality(game: &Game, player: Player) -> Vec<Player
                             y: y as usize,
                         },
                     };
-                    if room_for_wall_placement(&game.board, orientation, x, y) {
+                    if room_for_wall_placement(&game.board.walls, orientation, x, y) {
                         moves.push(player_move);
                     }
                 }

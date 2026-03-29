@@ -80,7 +80,7 @@ pub fn draw(game: &Game, ctx: &mut Context) -> GameResult {
             graphics::DrawParam::default(),
         );
     }
-    for (x, col) in game.board.walls.iter().enumerate() {
+    for (x, col) in game.board.walls.0.iter().enumerate() {
         for (y, wall) in col.iter().enumerate() {
             let screen_x = x as f32 * (piece_square_size + wall_thickness) + piece_square_size;
             let screen_y = y as f32 * (piece_square_size + wall_thickness) + piece_square_size;

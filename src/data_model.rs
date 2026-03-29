@@ -53,7 +53,8 @@ pub struct WallPosition {
     pub y: usize,
 }
 
-pub type Walls = [[Option<WallOrientation>; WALL_GRID_HEIGHT]; WALL_GRID_WIDTH];
+#[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Walls(pub [[Option<WallOrientation>; WALL_GRID_HEIGHT]; WALL_GRID_WIDTH]);
 
 #[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Board {
@@ -121,6 +122,24 @@ pub enum Player {
     Black = 1,
 }
 
+impl Walls {
+    pub fn wall_at(
+        &self,
+        wall_orientation: WallOrientation,
+        wall_pos_x: isize,
+        wall_pos_y: isize,
+    ) -> bool {
+        wall_pos_x >= 0
+            && wall_pos_y >= 0
+            && wall_pos_x < WALL_GRID_WIDTH as isize
+            && wall_pos_y < WALL_GRID_HEIGHT as isize
+            && matches!(
+                &self.0[wall_pos_x as usize][wall_pos_y as usize],
+                Some(o) if *o == wall_orientation
+            )
+    }
+}
+
 impl Board {
     pub fn new() -> Self {
         Self {
@@ -133,22 +152,6 @@ impl Board {
             walls: Default::default(),
             player_positions: [PiecePosition::new(4, 3), PiecePosition::new(4, 5)],
         }
-    }
-
-    pub fn wall_at(
-        &self,
-        wall_orientation: WallOrientation,
-        wall_pos_x: isize,
-        wall_pos_y: isize,
-    ) -> bool {
-        wall_pos_x >= 0
-            && wall_pos_y >= 0
-            && wall_pos_x < WALL_GRID_WIDTH as isize
-            && wall_pos_y < WALL_GRID_HEIGHT as isize
-            && matches!(
-                &self.walls[wall_pos_x as usize][wall_pos_y as usize],
-                Some(o) if *o == wall_orientation
-            )
     }
 
     pub fn player_position(&self, player: Player) -> &PiecePosition {

@@ -7,7 +7,7 @@ use crate::{
     all_moves::ALL_MOVES,
     commands::{Command, Session, execute_command},
     data_model::{Game, PlayerMove},
-    game_logic::is_move_legal_with_player_at_position,
+    game_logic::is_move_legal,
 };
 
 #[derive(Default)]
@@ -23,10 +23,9 @@ impl Agent for Carlo {
     }
 
     fn get_move(&mut self, game: &Game) -> PlayerMove {
-        let pos = game.board.player_position(game.player);
         ALL_MOVES
             .iter()
-            .filter(|m| is_move_legal_with_player_at_position(&game, game.player, pos, m))
+            .filter(|m| is_move_legal(game, m))
             .choose(&mut self.rng)
             .expect("at least one move will always be valid")
             .clone()

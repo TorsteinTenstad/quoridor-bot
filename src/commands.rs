@@ -104,7 +104,6 @@ pub fn execute_command(session: &mut Session, command: Command) {
                 let m = nn_bot::get_move(
                     current_game_state,
                     session.neural_networks.get(&player).unwrap(),
-                    player,
                     temperature,
                 );
 
@@ -185,7 +184,7 @@ pub fn parse_command(input: &str) -> ParseCommandResult {
     }
 }
 
-pub fn get_legal_command(game: &Game, player: Player) -> Command {
+pub fn get_legal_command(game: &Game) -> Command {
     use std::io::{self, Write};
 
     loop {
@@ -197,7 +196,7 @@ pub fn get_legal_command(game: &Game, player: Player) -> Command {
 
         match parse_command(input) {
             ParseCommandResult::Command(Command::PlayMove(player_move))
-                if !is_move_legal(game, player, &player_move) =>
+                if !is_move_legal(game, &player_move) =>
             {
                 println!("Invalid move.")
             }
