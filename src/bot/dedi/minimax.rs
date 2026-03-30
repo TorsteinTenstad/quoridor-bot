@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use crate::{
     bot::dedi::walls::{Tile, get_board, get_wall_moves},
     data_model::{Game, PIECE_GRID_HEIGHT, Player, PlayerMove},
@@ -9,9 +11,37 @@ use crate::{
 
 pub const INF: isize = isize::MAX - 1;
 
-pub fn minimax(game: &Game, depth: usize) -> (Option<PlayerMove>, isize) {
-    _minimax(game, depth, -INF, INF, Tile::Invalid, Tile::Invalid)
-    // Tile::Invalid is ok as long as depth > 0
+pub fn minimax_iterative(game: &Game, duration: Duration) -> Option<PlayerMove> {
+    let deadline = Some(Instant::now() + duration);
+    let mut depth = 1;
+    let mut best_move: Option<PlayerMove> = None;
+    loop {
+        if let Some((_move, h)) = minimax(game, depth, deadline) {
+            println!("Found {:?} at level {:?} with h={:?}", _move, depth, h);
+            best_move = _move;
+            depth += 1;
+        } else {
+            break;
+        }
+    }
+
+    best_move
+}
+
+pub fn minimax(
+    game: &Game,
+    depth: usize,
+    deadline: Option<Instant>,
+) -> Option<(Option<PlayerMove>, isize)> {
+    _minimax(
+        game,
+        depth,
+        -INF,
+        INF,
+        Tile::Invalid, // Tile::Invalid is ok as long as depth > 0
+        Tile::Invalid,
+        deadline,
+    )
 }
 
 fn target(player: Player) -> usize {
@@ -29,10 +59,14 @@ fn _minimax(
     beta: isize,
     tile_p1: Tile,
     tile_p2: Tile,
-) -> (Option<PlayerMove>, isize) {
+    deadline: Option<Instant>,
+) -> Option<(Option<PlayerMove>, isize)> {
+    if deadline.is_some_and(|deadline| Instant::now() > deadline) {
+        return None;
+    }
     if depth <= 0 {
         let h = heuristic(game, tile_p1, tile_p2);
-        return (None, h);
+        return Some((None, h));
     }
     let mut moves: Vec<(PlayerMove, Tile, Tile)> = Vec::new();
 
@@ -42,10 +76,10 @@ fn _minimax(
     let pos_p2 = game.board.player_position(game.player.opponent());
 
     if pos_p1.y == target(p1) {
-        return (None, INF);
+        return Some((None, INF));
     }
     if pos_p2.y == target(p2) {
-        return (None, -INF);
+        return Some((None, -INF));
     }
 
     let board_p1 = get_board(&game, p1);
@@ -72,7 +106,7 @@ fn _minimax(
     }
 
     if moves.len() == 0 {
-        return (None, -INF);
+        return Some((None, -INF));
     }
 
     let mut alpha = alpha;
@@ -81,20 +115,24 @@ fn _minimax(
 
     for (_move, t1, t2) in moves {
         let game_next = execute_move_unchecked(game, &_move);
-        let (_, h_next) = _minimax(&game_next, depth - 1, -beta, -alpha, t2, t1);
-        let h_inv = -h_next;
+        if let Some((_, h_next)) = _minimax(&game_next, depth - 1, -beta, -alpha, t2, t1, deadline)
+        {
+            let h_inv = -h_next;
 
-        if h_inv > h_best || move_best == None {
-            h_best = h_inv;
-            move_best = Some(_move);
-        }
-        alpha = isize::max(alpha, h_best);
-        if alpha >= beta {
-            break;
+            if h_inv > h_best || move_best == None {
+                h_best = h_inv;
+                move_best = Some(_move);
+            }
+            alpha = isize::max(alpha, h_best);
+            if alpha >= beta {
+                break;
+            }
+        } else {
+            return None;
         }
     }
 
-    (move_best, h_best)
+    Some((move_best, h_best))
 }
 
 fn heuristic(game: &Game, t1: Tile, t2: Tile) -> isize {
