@@ -5,57 +5,11 @@ use crate::data_model::{
     WallOrientation,
 };
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Dir {
-    Unreachable,
-    Goal,
-    Left,
-    Right,
-    Up,
-    Down,
-}
-
-impl From<(i8, i8)> for Dir {
-    fn from(dxdy: (i8, i8)) -> Self {
-        match dxdy {
-            (-1, _) => Dir::Left,
-            (1, _) => Dir::Right,
-            (_, -1) => Dir::Up,
-            (_, 1) => Dir::Down,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl Dir {
-    fn reverse(&self) -> Dir {
-        match self {
-            Dir::Left => Dir::Right,
-            Dir::Right => Dir::Left,
-            Dir::Up => Dir::Down,
-            Dir::Down => Dir::Up,
-            Dir::Unreachable => unreachable!(),
-            Dir::Goal => unreachable!(),
-        }
-    }
-}
-
-impl Debug for Dir {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Unreachable => write!(f, "⊗"),
-            Self::Goal => write!(f, "⊙"),
-            Self::Left => write!(f, "🠈"),
-            Self::Right => write!(f, "🠊"),
-            Self::Up => write!(f, "🠉"),
-            Self::Down => write!(f, "🠋"),
-        }
-    }
-}
+use super::path::{Dir, PathBlock};
 
 pub struct Board {
     game: Game,
-    path: [[(Dir, u8); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
+    path: [[(PathBlock, u8); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
     visited: [[bool; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
 }
 
@@ -75,7 +29,7 @@ impl From<&Game> for Board {
     fn from(game: &Game) -> Self {
         let game = game.clone();
 
-        let mut path = [[(Dir::Unreachable, 255); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
+        let mut path = [[(PathBlock::Unreachable, 255); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
         let mut visited = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
         let mut queue = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
         let mut queue_len = 0;
@@ -96,7 +50,7 @@ impl From<&Game> for Board {
                     };
                 }
 
-                path[y][x] = (Dir::Goal, 0);
+                path[y][x] = (PathBlock::Goal, 0);
                 visited[y][x] = true;
                 queue[queue_len] = (x as i8, y as i8);
                 queue_len += 1;
@@ -134,7 +88,7 @@ impl Board {
                 }
 
                 let dist = self.path[y as usize][x as usize].1 + 1;
-                let dir = Dir::from((dx, dy)).reverse();
+                let dir = PathBlock::Dir(Dir::from((dx, dy)).reverse());
                 self.path[ny as usize][nx as usize] = (dir, dist);
 
                 if nx as usize == player_pos.x && y as usize == player_pos.y {
@@ -163,7 +117,7 @@ impl Board {
                 WallOrientation::Vertical => [Dir::Right, Dir::Left, Dir::Right, Dir::Left],
             })
         {
-            if self.path[y][x].0 == towards_wall {
+            if self.path[y][x].0 == PathBlock::Dir(towards_wall) {
                 invalid_q[invalid_q_len] = (x as i8, y as i8);
                 invalid_q_len += 1;
             }
@@ -177,14 +131,14 @@ impl Board {
             let (x, y) = invalid_q[i];
 
             self.visited[y as usize][x as usize] = false;
-            self.path[y as usize][x as usize] = (Dir::Unreachable, 255);
+            self.path[y as usize][x as usize] = (PathBlock::Unreachable, 255);
 
             for (dx, dy) in board_neighbors(&self.game, x, y) {
                 let nx = x + dx;
                 let ny = y + dy;
 
                 let towards_invalid = Dir::from((dx, dy)).reverse();
-                if self.path[ny as usize][nx as usize].0 == towards_invalid {
+                if self.path[ny as usize][nx as usize].0 == PathBlock::Dir(towards_invalid) {
                     invalid_q[invalid_q_len] = (nx, ny);
                     invalid_q_len += 1;
                 }
@@ -199,7 +153,7 @@ impl Board {
                 let nx = x + dx;
                 let ny = y + dy;
 
-                if self.path[ny as usize][nx as usize].0 != Dir::Unreachable {
+                if self.path[ny as usize][nx as usize].0 != PathBlock::Unreachable {
                     let dist = self.path[ny as usize][nx as usize].1;
                     if dist < best_neighbor.unwrap_or(((0, 0), 255)).1 {
                         best_neighbor = Some(((nx, ny), dist));

@@ -1,4 +1,5 @@
 mod board;
+mod path;
 
 use rand::{rngs::ThreadRng, seq::IteratorRandom};
 
