@@ -54,8 +54,6 @@ impl super::Bot for NeuralNet {
 //
 // You can split this into modules later; kept single-file for clarity.
 
-use std::default;
-
 use burn;
 use burn::backend::NdArray;
 use burn::module::Module;
