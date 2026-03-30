@@ -17,25 +17,17 @@ pub struct Pathfinding {
 impl Pathfinding {
     pub fn new(board: &Board) -> Self {
         Self {
-            white: LPAStar::new(
-                Player::White,
-                board.player_position(Player::White),
-                board.walls.clone(),
-            ),
-            black: LPAStar::new(
-                Player::Black,
-                board.player_position(Player::Black),
-                board.walls.clone(),
-            ),
+            white: LPAStar::new(Player::White, board.player_position(Player::White)),
+            black: LPAStar::new(Player::Black, board.player_position(Player::Black)),
         }
     }
     pub fn any_blocked(&mut self, board: &Board) -> bool {
         self.white
-            .distance_to_goal(board.player_position(Player::White))
+            .distance_to_goal(board.player_position(Player::White), &board.walls)
             == u16::MAX
             || self
                 .black
-                .distance_to_goal(board.player_position(Player::Black))
+                .distance_to_goal(board.player_position(Player::Black), &board.walls)
                 == u16::MAX
     }
     pub fn clone_with_move(&self, new_board: &Board, m: &PlayerMove) -> Self {
@@ -50,11 +42,13 @@ impl Pathfinding {
                     position,
                     *orientation,
                     new_board.player_position(Player::White),
+                    &new_board.walls,
                 );
                 clone.black.place_wall(
                     position,
                     *orientation,
                     new_board.player_position(Player::Black),
+                    &new_board.walls,
                 );
             }
         }
@@ -89,13 +83,12 @@ pub fn is_start(pos: &PiecePosition, player: Player) -> bool {
 #[derive(Debug, Clone)]
 pub struct LPAStar {
     board: [[Estimates; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
-    walls: Walls,
     player: Player,
     queue: PriorityQueue<Key, PiecePosition>,
 }
 
 impl LPAStar {
-    pub fn new(player: Player, goal: &PiecePosition, walls: Walls) -> Self {
+    pub fn new(player: Player, goal: &PiecePosition) -> Self {
         let start_estimates = Estimates {
             g: u16::MAX,
             rhs: 0,
@@ -123,7 +116,6 @@ impl LPAStar {
         }
         Self {
             board,
-            walls,
             player,
             queue,
         }
@@ -131,22 +123,22 @@ impl LPAStar {
     fn place_wall(
         &mut self,
         pos: &WallPosition,
-        orientation: WallOrientation,
+        _orientation: WallOrientation,
         goal: &PiecePosition,
+        walls: &Walls,
     ) {
-        self.walls.0[pos.x][pos.y] = Some(orientation);
         for dx in 0..2 {
             for dy in 0..2 {
-                self.update_node(&PiecePosition::new(pos.x + dx, pos.y + dy), goal);
+                self.update_node(&PiecePosition::new(pos.x + dx, pos.y + dy), goal, walls);
             }
         }
     }
-    pub fn distance_to_goal(&mut self, goal: &PiecePosition) -> u16 {
-        self.compute_shortest_path(goal);
+    pub fn distance_to_goal(&mut self, goal: &PiecePosition, walls: &Walls) -> u16 {
+        self.compute_shortest_path(goal, walls);
         let estimates = &self.board[goal.y][goal.x];
         estimates.g
     }
-    fn compute_shortest_path(&mut self, goal: &PiecePosition) {
+    fn compute_shortest_path(&mut self, goal: &PiecePosition, walls: &Walls) {
         loop {
             let Some((top_key, top_pos)) = self.queue.pop() else {
                 break;
@@ -163,17 +155,16 @@ impl LPAStar {
                 estimates.g = estimates.rhs;
             } else {
                 estimates.g = u16::MAX;
-                self.update_node(&top_pos, goal);
+                self.update_node(&top_pos, goal, walls);
             }
-            // TODO: collect can be optimized out:
-            for neighbor in neighbors(&self.walls, &top_pos).collect::<Vec<_>>() {
-                self.update_node(&neighbor, goal);
+            for neighbor in neighbors(walls, &top_pos) {
+                self.update_node(&neighbor, goal, walls);
             }
         }
     }
-    fn update_node(&mut self, pos: &PiecePosition, goal: &PiecePosition) {
+    fn update_node(&mut self, pos: &PiecePosition, goal: &PiecePosition, walls: &Walls) {
         if !is_start(pos, self.player) {
-            let new_rhs = neighbors(&self.walls, pos)
+            let new_rhs = neighbors(walls, pos)
                 .map(|neigbor_pos| self.board[neigbor_pos.y][neigbor_pos.x].g.saturating_add(1))
                 .min()
                 .unwrap_or(u16::MAX);
@@ -209,6 +200,22 @@ fn calculate_key_of_estimates(
     Key(k1, k2)
 }
 
+pub fn dump(state: &LPAStar) {
+    for row in &state.board {
+        for cell in row {
+            let f = |n| {
+                if n == u16::MAX {
+                    "--".into()
+                } else {
+                    format!("{:2}", n)
+                }
+            };
+            print!("({} {})", f(cell.g), f(cell.rhs));
+        }
+        println!();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,24 +230,18 @@ mod tests {
         let mut pathfinding = Pathfinding::new(&board);
         let a = pathfinding
             .black
-            .distance_to_goal(&PiecePosition::new(0, 1));
-        for row in &pathfinding.black.board {
-            for cell in row {
-                print!("({:5} {:5})", cell.g, cell.rhs);
-            }
-            println!();
-        }
+            .distance_to_goal(&PiecePosition::new(0, 1), &board.walls);
         assert_eq!(a, 1);
         assert_eq!(
             pathfinding
                 .black
-                .distance_to_goal(&PiecePosition::new(0, 0)),
+                .distance_to_goal(&PiecePosition::new(0, 0), &board.walls),
             0
         );
         assert_eq!(
             pathfinding
                 .black
-                .distance_to_goal(&PiecePosition::new(0, 5)),
+                .distance_to_goal(&PiecePosition::new(0, 5), &board.walls),
             5
         );
     }
@@ -253,7 +254,7 @@ mod tests {
         assert_eq!(
             pathfinding
                 .black
-                .distance_to_goal(&PiecePosition::new(0, 5)),
+                .distance_to_goal(&PiecePosition::new(0, 5), &board.walls),
             9
         );
     }
@@ -269,10 +270,31 @@ mod tests {
         assert_eq!(
             pathfinding
                 .white
-                .distance_to_goal(&PiecePosition::new(0, 0)),
+                .distance_to_goal(&PiecePosition::new(0, 0), &game.board.walls),
             u16::MAX
         );
         assert!(pathfinding.any_blocked(&game.board))
+    }
+    #[test]
+    #[ntest::timeout(1000)]
+    fn blocked_iterative() {
+        let mut game = Game::new();
+        game.board.walls.0[2][2] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[2][3] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[2][4] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[1][3] = Some(WallOrientation::Vertical);
+        game.board.player_positions[Player::Black.as_index()] = PiecePosition::new(2, 3);
+        game.board.player_positions[Player::White.as_index()] = PiecePosition::new(2, 4);
+        let mut pathfinding = Pathfinding::new(&game.board);
+        assert!(!pathfinding.any_blocked(&game.board));
+        let m = &PlayerMove::PlaceWall {
+            orientation: WallOrientation::Vertical,
+            position: WallPosition { x: 3, y: 3 },
+        };
+        let new_board = &execute_move_unchecked(&game, m).board;
+        let mut pathfinding = pathfinding.clone_with_move(new_board, m);
+
+        assert!(pathfinding.any_blocked(new_board));
     }
     #[test]
     #[ntest::timeout(1000)]
@@ -284,18 +306,19 @@ mod tests {
         assert_eq!(
             pathfinding
                 .black
-                .distance_to_goal(&PiecePosition::new(0, 5)),
+                .distance_to_goal(&PiecePosition::new(0, 5), &game.board.walls),
             9
         );
-        pathfinding.black.place_wall(
-            &WallPosition { x: 4, y: 2 },
-            WallOrientation::Horizontal,
-            &PiecePosition::new(0, 5),
-        );
+        let m = &PlayerMove::PlaceWall {
+            orientation: WallOrientation::Horizontal,
+            position: WallPosition { x: 4, y: 2 },
+        };
+        let new_board = &execute_move_unchecked(&game, m).board;
+        let mut pathfinding = pathfinding.clone_with_move(new_board, m);
         assert_eq!(
             pathfinding
                 .black
-                .distance_to_goal(&PiecePosition::new(0, 5)),
+                .distance_to_goal(&PiecePosition::new(0, 5), &new_board.walls),
             11
         );
         let m = &PlayerMove::MovePiece(MovePiece {
@@ -306,7 +329,7 @@ mod tests {
             pathfinding
                 .clone_with_move(&execute_move_unchecked(&game, m).board, m)
                 .black
-                .distance_to_goal(&PiecePosition::new(1, 5)),
+                .distance_to_goal(&PiecePosition::new(1, 5), &game.board.walls),
             10
         )
     }

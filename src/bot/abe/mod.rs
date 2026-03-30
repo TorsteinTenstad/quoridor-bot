@@ -1,5 +1,4 @@
 use crate::{
-    a_star::a_star,
     a_star_to_opponent::a_star_to_opponent,
     args::Args,
     bot::Bot,
@@ -13,7 +12,6 @@ use crate::{
         room_for_wall_placement,
     },
     l_p_a_star::Pathfinding,
-    render_board,
     session::Session,
     square_outline_iterator::SquareOutlineIterator,
 };
@@ -175,14 +173,14 @@ pub const WHITE_WINS_BLACK_LOSES: isize = -WHITE_LOSES_BLACK_WINS;
 pub fn heuristic_board_score(game: &Game, pathfinding: &mut Pathfinding) -> isize {
     let black_distance = pathfinding
         .black
-        .distance_to_goal(game.board.player_position(Player::Black))
+        .distance_to_goal(game.board.player_position(Player::Black), &game.board.walls)
         as isize;
     if black_distance == 0 {
         return WHITE_LOSES_BLACK_WINS;
     }
     let white_distance = pathfinding
         .white
-        .distance_to_goal(game.board.player_position(Player::White))
+        .distance_to_goal(game.board.player_position(Player::White), &game.board.walls)
         as isize;
     if white_distance == 0 {
         return WHITE_WINS_BLACK_LOSES;
@@ -207,7 +205,8 @@ pub fn heuristic_board_score(game: &Game, pathfinding: &mut Pathfinding) -> isiz
         / (PIECE_GRID_HEIGHT - 1) as f32
         - 1.0;
 
-    let side_component = -side * 1000.0 / path_length_between_players as f32;
+    let side_component =
+        -side * (1.0 - wall_progress) * 1000.0 / path_length_between_players as f32;
 
     distance_priority * distance_score
         + (wall_priority * wall_score as f32 + side_component) as isize
@@ -322,11 +321,11 @@ fn alpha_beta(
         },
         None => search_first,
     };
-    let heuristic_board_score = heuristic_board_score(game, pathfinding);
     if depth == 0
-        || heuristic_board_score == WHITE_LOSES_BLACK_WINS
-        || heuristic_board_score == WHITE_WINS_BLACK_LOSES
+        || game.board.player_position(Player::White).y == PIECE_GRID_HEIGHT - 1
+        || game.board.player_position(Player::Black).y == 0
     {
+        let heuristic_board_score = heuristic_board_score(game, pathfinding);
         return AlphaBetaResult::Moves((heuristic_board_score, Default::default()));
     }
     let (last, rest) = search_first
@@ -346,7 +345,8 @@ fn alpha_beta(
                 .chain(moves_ordered_by_heuristic_quality(game))
             {
                 let child_game_state = execute_move_unchecked(game, &player_move);
-                let mut pathfinding = pathfinding.clone_with_move(&game.board, &player_move);
+                let mut pathfinding =
+                    pathfinding.clone_with_move(&child_game_state.board, &player_move);
                 if pathfinding.any_blocked(&child_game_state.board) {
                     continue;
                 }
@@ -402,7 +402,8 @@ fn alpha_beta(
                 .chain(moves_ordered_by_heuristic_quality(game))
             {
                 let child_game_state = execute_move_unchecked(game, &player_move);
-                let mut pathfinding = pathfinding.clone_with_move(&game.board, &player_move);
+                let mut pathfinding =
+                    pathfinding.clone_with_move(&child_game_state.board, &player_move);
                 if pathfinding.any_blocked(&child_game_state.board) {
                     continue;
                 }
