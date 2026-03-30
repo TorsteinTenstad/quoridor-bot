@@ -1,11 +1,10 @@
 use crate::{
-    a_star_to_opponent::a_star_to_opponent,
     args::Args,
-    bot::Bot,
+    bot::{Bot, abe::heuristic::Heuristic},
     commands::parse_player_move,
     data_model::{
-        Game, PIECE_GRID_HEIGHT, Player, PlayerMove, TOTAL_WALLS, WALL_GRID_HEIGHT,
-        WALL_GRID_WIDTH, WallOrientation, WallPosition,
+        Game, PIECE_GRID_HEIGHT, Player, PlayerMove, WALL_GRID_HEIGHT, WALL_GRID_WIDTH,
+        WallOrientation, WallPosition,
     },
     game_logic::{
         all_move_piece_moves, execute_move_unchecked, is_move_legal, is_move_piece_legal,
@@ -21,11 +20,13 @@ use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
+pub mod heuristic;
 
 #[derive(Default)]
 pub struct Abe {
     default_depth: Option<usize>,
     default_seconds: Option<u64>,
+    default_heuristic: Heuristic,
     cache: Cache,
 }
 
@@ -33,6 +34,9 @@ impl Abe {
     pub fn load_default_params(&mut self, args: &Args) {
         self.default_depth = args.depth;
         self.default_seconds = args.seconds;
+        if let Some(heuristic) = args.heuristic {
+            self.default_heuristic = heuristic;
+        }
     }
 }
 
@@ -44,13 +48,19 @@ pub enum AbeCommand {
 
         #[arg(short, long, group = "time_control")]
         seconds: Option<u64>,
+
+        #[arg(short, long)]
+        heuristic: Option<Heuristic>,
     },
-    ShowMove {
+    Show {
         #[arg(short, long, group = "time_control")]
         depth: Option<usize>,
 
         #[arg(short, long, group = "time_control")]
         seconds: Option<u64>,
+
+        #[arg(short, long)]
+        heuristic: Option<Heuristic>,
     },
     Eval {
         #[arg()]
@@ -61,6 +71,9 @@ pub enum AbeCommand {
 
         #[arg(short, long, group = "time_control")]
         seconds: Option<u64>,
+
+        #[arg(short, long)]
+        heuristic: Option<Heuristic>,
     },
     ExportCache {
         #[arg()]
@@ -76,55 +89,70 @@ impl Bot for Abe {
     type Command = AbeCommand;
 
     fn get_move(&mut self, game: &Game) -> PlayerMove {
-        let (_, best_moves) = get_bot_move(
+        let (_, eval) = get_bot_move(
             game,
             self.default_depth,
             self.default_seconds.map(Duration::from_secs),
+            self.default_heuristic,
             &mut self.cache,
         );
-        best_moves.into_iter().last().unwrap().best_move
+        eval.best_moves.into_iter().last().unwrap()
     }
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
         match cmd {
-            AbeCommand::ShowMove { depth, seconds } => {
-                let (_, best_moves) = get_bot_move(
+            AbeCommand::Show {
+                depth,
+                seconds,
+                heuristic,
+            } => {
+                let (duration, eval) = get_bot_move(
                     &session.game,
                     depth,
                     seconds.map(Duration::from_secs),
+                    heuristic.unwrap_or(self.default_heuristic),
                     &mut self.cache,
                 );
-                for eval in best_moves.iter().rev() {
-                    println!("{eval}");
-                }
+                println!("{eval} {:?}", duration);
             }
-            AbeCommand::Move { depth, seconds } => {
-                let (duration, best_moves) = get_bot_move(
+            AbeCommand::Move {
+                depth,
+                seconds,
+                heuristic,
+            } => {
+                let (duration, eval) = get_bot_move(
                     &session.game,
                     depth,
                     seconds.map(Duration::from_secs),
+                    heuristic.unwrap_or(self.default_heuristic),
                     &mut self.cache,
                 );
-                let eval = best_moves.into_iter().last().unwrap();
-                println!("{} {:?}", eval, duration);
-                session.make_move(eval.best_move)
+                print!("{}", eval.best_moves.last().unwrap());
+                print!(" score:{}", eval.score);
+                print!(" depth:{}", eval.best_moves.len());
+                println!(" {:?}", duration);
+                let m = eval.best_moves.into_iter().last().unwrap();
+                session.make_move(m)
             }
             AbeCommand::Eval {
                 move_to_evaluate,
                 depth,
                 seconds,
+                heuristic,
             } => {
                 if let Some(move_str) = move_to_evaluate {
                     if let Some(m) = parse_player_move(&move_str) {
                         if is_move_legal(&session.game, &m) {
                             let next_game_state = execute_move_unchecked(&session.game, &m);
-                            let (_, best_moves) = get_bot_move(
+                            let (duration, eval) = get_bot_move(
                                 &next_game_state,
                                 depth,
                                 seconds.map(Duration::from_secs),
+                                heuristic.unwrap_or(self.default_heuristic),
                                 &mut self.cache,
                             );
-                            println!("{}", best_moves.last().unwrap().score);
+                            let m = eval.best_moves.into_iter().last().unwrap();
+                            println!("{} {:?}", m, duration);
                         } else {
                             println!("Invalid move");
                         }
@@ -132,16 +160,14 @@ impl Bot for Abe {
                         println!("Could not parse move: {}", move_str);
                     }
                 } else {
-                    let (_, best_moves) = get_bot_move(
+                    let (_, eval) = get_bot_move(
                         &session.game,
                         depth,
                         seconds.map(Duration::from_secs),
+                        heuristic.unwrap_or(self.default_heuristic),
                         &mut self.cache,
                     );
-                    println!(
-                        "Best move evaluates to {}",
-                        best_moves.last().unwrap().score
-                    );
+                    println!("Best move evaluates to {}", eval.score);
                 }
             }
             AbeCommand::ExportCache { file: path } => match std::fs::File::create(path) {
@@ -170,83 +196,44 @@ impl Bot for Abe {
 pub const WHITE_LOSES_BLACK_WINS: isize = isize::MIN + 1;
 pub const WHITE_WINS_BLACK_LOSES: isize = -WHITE_LOSES_BLACK_WINS;
 
-pub fn heuristic_board_score(game: &Game, pathfinding: &mut Pathfinding) -> isize {
-    let black_distance = pathfinding
-        .black
-        .distance_to_goal(game.board.player_position(Player::Black), &game.board.walls)
-        as isize;
-    if black_distance == 0 {
-        return WHITE_LOSES_BLACK_WINS;
-    }
-    let white_distance = pathfinding
-        .white
-        .distance_to_goal(game.board.player_position(Player::White), &game.board.walls)
-        as isize;
-    if white_distance == 0 {
-        return WHITE_WINS_BLACK_LOSES;
-    }
-    let white_walls_left = game.walls_left[Player::White.as_index()] as isize;
-    let black_walls_left = game.walls_left[Player::Black.as_index()] as isize;
-    let distance_score = black_distance - white_distance;
-    let wall_score = white_walls_left - black_walls_left;
-    let total_walls_played = TOTAL_WALLS
-        - game.walls_left[Player::White.as_index()]
-        - game.walls_left[Player::Black.as_index()];
-    let wall_progress = total_walls_played as f32 / TOTAL_WALLS as f32;
-    let wall_value = 75.0 - 50.0 * wall_progress;
-    let (distance_priority, wall_priority) = (100, wall_value);
-
-    let path_length_between_players = a_star_to_opponent(&game.board, game.player)
-        .map(|v| v.len())
-        .unwrap_or(usize::MAX);
-
-    let side = (game.board.player_position(Player::White).y as f32
-        + game.board.player_position(Player::Black).y as f32)
-        / (PIECE_GRID_HEIGHT - 1) as f32
-        - 1.0;
-
-    let side_component =
-        -side * (1.0 - wall_progress) * 1000.0 / path_length_between_players as f32;
-
-    distance_priority * distance_score
-        + (wall_priority * wall_score as f32 + side_component) as isize
-}
-
 pub fn best_move_alpha_beta_iterative_deepening(
     game: &Game,
     search_duration: Duration,
+    heuristic: Heuristic,
     cache: &mut Cache,
-) -> Vec<BoardEvaluation> {
+) -> BoardEvaluation {
     let deadline = Some(Instant::now() + search_duration);
-    let mut best_moves: Vec<BoardEvaluation> = Default::default();
+    let mut eval: BoardEvaluation = Default::default();
     let mut depth = 0;
     let mut pathfinding = Pathfinding::new(&game.board);
     loop {
-        let search_first = best_moves
-            .iter()
-            .map(|eval| eval.best_move.clone())
-            .collect::<Vec<_>>();
         match alpha_beta(
             game,
             depth + 1,
             WHITE_LOSES_BLACK_WINS,
             WHITE_WINS_BLACK_LOSES,
-            &search_first,
+            &eval.best_moves,
             deadline,
+            heuristic,
             cache,
             &mut pathfinding,
         ) {
             AlphaBetaResult::Stopped => {
-                break best_moves;
+                break eval;
             }
-            AlphaBetaResult::Moves((_, moves)) => {
-                best_moves = moves;
+            AlphaBetaResult::Moves(moves) => {
+                eval = moves;
                 depth += 1;
             }
         }
     }
 }
-pub fn best_move_alpha_beta(game: &Game, depth: usize, cache: &mut Cache) -> Vec<BoardEvaluation> {
+pub fn best_move_alpha_beta(
+    game: &Game,
+    depth: usize,
+    heuristic: Heuristic,
+    cache: &mut Cache,
+) -> BoardEvaluation {
     let mut pathfinding = Pathfinding::new(&game.board);
     match alpha_beta(
         game,
@@ -255,26 +242,34 @@ pub fn best_move_alpha_beta(game: &Game, depth: usize, cache: &mut Cache) -> Vec
         WHITE_WINS_BLACK_LOSES,
         Default::default(),
         None,
+        heuristic,
         cache,
         &mut pathfinding,
     ) {
         AlphaBetaResult::Stopped => unreachable!(),
-        AlphaBetaResult::Moves((_, moves)) => moves,
+        AlphaBetaResult::Moves(moves) => moves,
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BoardEvaluation {
     pub score: isize,
-    pub best_move: PlayerMove,
-    pub depth: usize,
+    pub best_moves: Vec<PlayerMove>,
 }
 
 impl Display for BoardEvaluation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.best_move)?;
+        write!(f, "{}", self.best_moves.last().unwrap())?;
         write!(f, " score:{}", self.score)?;
-        write!(f, " depth:{}", self.depth)?;
+        write!(f, " depth:{}", self.best_moves.len())?;
+        write!(
+            f,
+            " (full chain: {})",
+            self.best_moves
+                .iter()
+                .map(|m| format!("{m};"))
+                .collect::<String>()
+        )?;
         Ok(())
     }
 }
@@ -282,10 +277,10 @@ impl Display for BoardEvaluation {
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 pub struct Cache {
     #[serde(with = "serde_json_any_key::any_key_map")]
-    transposition_table: HashMap<Game, Vec<BoardEvaluation>>,
+    transposition_table: HashMap<Game, BoardEvaluation>,
 }
 enum AlphaBetaResult {
-    Moves((isize, Vec<BoardEvaluation>)),
+    Moves(BoardEvaluation),
     Stopped,
 }
 
@@ -297,6 +292,7 @@ fn alpha_beta(
     beta: isize,
     search_first: &[PlayerMove],
     deadline: Option<Instant>,
+    heuristic: Heuristic,
     cache: &mut Cache,
     pathfinding: &mut Pathfinding,
 ) -> AlphaBetaResult {
@@ -304,29 +300,26 @@ fn alpha_beta(
         return AlphaBetaResult::Stopped;
     }
     let search_first = match cache.transposition_table.get(game) {
-        Some(evaluations) => match evaluations.last() {
-            Some(eval) => {
-                if eval.depth >= depth {
-                    return AlphaBetaResult::Moves((eval.score, evaluations.clone()));
-                } else if search_first.len() <= evaluations.len() {
-                    &evaluations
-                        .iter()
-                        .map(|eval| eval.best_move.clone())
-                        .collect::<Vec<_>>()
-                } else {
-                    search_first
-                }
+        Some(eval) => {
+            if eval.best_moves.len() >= depth {
+                return AlphaBetaResult::Moves(eval.clone());
+            } else if eval.best_moves.len() > search_first.len() {
+                &eval.best_moves.clone()
+            } else {
+                search_first
             }
-            None => search_first,
-        },
+        }
         None => search_first,
     };
     if depth == 0
         || game.board.player_position(Player::White).y == PIECE_GRID_HEIGHT - 1
         || game.board.player_position(Player::Black).y == 0
     {
-        let heuristic_board_score = heuristic_board_score(game, pathfinding);
-        return AlphaBetaResult::Moves((heuristic_board_score, Default::default()));
+        let heuristic_board_score = heuristic.eval(game, pathfinding);
+        return AlphaBetaResult::Moves(BoardEvaluation {
+            score: heuristic_board_score,
+            best_moves: Default::default(),
+        });
     }
     let (last, rest) = search_first
         .split_last()
@@ -361,21 +354,18 @@ fn alpha_beta(
                         &[]
                     },
                     deadline,
+                    heuristic,
                     cache,
                     &mut pathfinding,
                 ) {
-                    AlphaBetaResult::Moves(moves) => moves,
+                    AlphaBetaResult::Moves(eval) => (eval.score, eval.best_moves),
                     AlphaBetaResult::Stopped => {
                         return AlphaBetaResult::Stopped;
                     }
                 };
                 if score > value || best_moves.is_empty() {
                     best_moves = moves;
-                    best_moves.push(BoardEvaluation {
-                        score,
-                        best_move: player_move,
-                        depth,
-                    });
+                    best_moves.push(player_move);
                 }
                 value = isize::max(value, score);
                 if value >= beta {
@@ -383,16 +373,19 @@ fn alpha_beta(
                 }
                 alpha = isize::max(alpha, value);
             }
-            if cache
-                .transposition_table
-                .get(game)
-                .is_none_or(|t| t.last().is_none_or(|t| t.depth < depth))
-            {
-                cache
+            let eval = BoardEvaluation {
+                score: value,
+                best_moves,
+            };
+            if depth > 1
+                && cache
                     .transposition_table
-                    .insert(game.clone(), best_moves.clone());
+                    .get(game)
+                    .is_none_or(|eval| eval.best_moves.len() < depth)
+            {
+                cache.transposition_table.insert(game.clone(), eval.clone());
             }
-            AlphaBetaResult::Moves((value, best_moves))
+            AlphaBetaResult::Moves(eval)
         }
         Player::Black => {
             let mut value = WHITE_WINS_BLACK_LOSES;
@@ -418,21 +411,18 @@ fn alpha_beta(
                         &[]
                     },
                     deadline,
+                    heuristic,
                     cache,
                     &mut pathfinding,
                 ) {
-                    AlphaBetaResult::Moves(moves) => moves,
+                    AlphaBetaResult::Moves(eval) => (eval.score, eval.best_moves),
                     AlphaBetaResult::Stopped => {
                         return AlphaBetaResult::Stopped;
                     }
                 };
                 if score < value || best_moves.is_empty() {
                     best_moves = moves;
-                    best_moves.push(BoardEvaluation {
-                        score,
-                        best_move: player_move,
-                        depth,
-                    });
+                    best_moves.push(player_move);
                 }
                 value = isize::min(value, score);
                 if value <= alpha {
@@ -440,16 +430,19 @@ fn alpha_beta(
                 }
                 beta = isize::min(beta, value);
             }
-            if cache
-                .transposition_table
-                .get(game)
-                .is_none_or(|t| t.last().is_none_or(|t| t.depth < depth))
-            {
-                cache
+            let eval = BoardEvaluation {
+                score: value,
+                best_moves,
+            };
+            if depth > 1
+                && cache
                     .transposition_table
-                    .insert(game.clone(), best_moves.clone());
+                    .get(game)
+                    .is_none_or(|eval| eval.best_moves.len() < depth)
+            {
+                cache.transposition_table.insert(game.clone(), eval.clone());
             }
-            AlphaBetaResult::Moves((value, best_moves))
+            AlphaBetaResult::Moves(eval)
         }
     }
 }
@@ -503,14 +496,15 @@ pub fn get_bot_move(
     game: &Game,
     depth: Option<usize>,
     duration: Option<Duration>,
+    heuristic: Heuristic,
     cache: &mut Cache,
-) -> (Duration, Vec<BoardEvaluation>) {
+) -> (Duration, BoardEvaluation) {
     let start_time = std::time::Instant::now();
     let best_moves = match (depth, duration) {
-        (Some(depth), _) => best_move_alpha_beta(game, depth, cache),
+        (Some(depth), _) => best_move_alpha_beta(game, depth, heuristic, cache),
         (_, duration) => {
-            let duration = duration.unwrap_or(Duration::from_secs(3));
-            best_move_alpha_beta_iterative_deepening(game, duration, cache)
+            let duration = duration.unwrap_or(Duration::from_secs(5));
+            best_move_alpha_beta_iterative_deepening(game, duration, heuristic, cache)
         }
     };
     (start_time.elapsed(), best_moves)

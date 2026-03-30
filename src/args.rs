@@ -8,6 +8,9 @@ pub struct Args {
     #[arg(short, long, group = "time_control")]
     pub seconds: Option<u64>,
 
+    #[arg(short, long)]
+    pub heuristic: Option<crate::bot::abe::heuristic::Heuristic>,
+
     #[clap(short, long, default_value_t = 0.0)]
     pub temperature: f32,
 
