@@ -57,7 +57,7 @@ pub fn get_move(game: &Game) {
     println!("count: {:?}", wall_moves.len());
 }
 
-fn get_board(game: &Game) -> Board {
+fn get_board(game: &Game, player: Player) -> Board {
     let mut board = Board {
         tiles: [[Tile::Invalid; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
     };
@@ -65,7 +65,7 @@ fn get_board(game: &Game) -> Board {
     let mut queue = [(0, 0); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
     let mut queue_len = 0;
 
-    let y_target = match game.player {
+    let y_target = match player {
         Player::Black => 0,
         Player::White => PIECE_GRID_HEIGHT - 1,
     };
@@ -154,7 +154,10 @@ fn get_wall_moves(game: &Game) -> Vec<PlayerMove> {
     let mut wall_moves: Vec<PlayerMove> = Vec::new();
 
     let mut game = game.clone();
-    let board = get_board(&game);
+    let p1 = game.player;
+    let p2 = game.player.opponent();
+    let board_p1 = get_board(&game, p1);
+    let board_p2 = get_board(&game, p2);
 
     for y in 0..WALL_GRID_HEIGHT {
         for x in 0..WALL_GRID_WIDTH {
@@ -180,80 +183,21 @@ fn get_wall_moves(game: &Game) -> Vec<PlayerMove> {
                     continue;
                 }
 
-                let mut board = Board {
-                    tiles: board.tiles.clone(),
-                };
-                game.board.walls.0[position.x][position.y] = Some(orientation);
-
-                let candidates = [(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)]
-                    .into_iter()
-                    .zip(match orientation {
-                        WallOrientation::Horizontal => [Dir::PosY, Dir::PosY, Dir::NegY, Dir::NegY],
-                        WallOrientation::Vertical => [Dir::PosX, Dir::NegX, Dir::PosX, Dir::NegX],
-                    });
-
-                let mut invalids: Vec<(usize, usize)> = Vec::new();
-                for ((x, y), towards_wall) in candidates {
-                    match board.tiles[y][x] {
-                        Tile::Valid(dir, _) => {
-                            if dir == towards_wall {
-                                board_propagate_invalid(&mut board, &mut invalids, x, y);
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-
-                {
-                    let mut queue = [(0, 0); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
-                    let mut queue_len = 0;
-                    let mut seen = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
-
-                    for invalid in invalids {
-                        for dir in [Dir::PosX, Dir::PosY, Dir::NegX, Dir::NegY] {
-                            if !dir.can_apply(invalid) {
-                                continue;
-                            }
-                            let (x, y) = dir.apply(invalid);
-
-                            if seen[y][x] {
-                                continue;
-                            }
-                            seen[y][x] = true;
-
-                            let dx = x as i8 - invalid.0 as i8;
-                            let dy = y as i8 - invalid.1 as i8;
-                            if wall_blocks(&game.board.walls, invalid.0, invalid.1, dx, dy) {
-                                continue;
-                            }
-
-                            match board.tiles[y][x] {
-                                Tile::Invalid => {}
-                                Tile::Valid(_, _) => {
-                                    queue[queue_len] = (x, y);
-                                    queue_len += 1;
-                                }
-                            };
-                        }
-                    }
-
-                    bfs(&game.board.walls, &mut board, queue, queue_len);
-                }
-                game.board.walls.0[position.x][position.y] = None;
-
-                // TODO: this does not work with both players, since target is not the same.
-                let mut skip = false;
-                for pos in [game.board.player_position(game.player)] {
-                    match board.tiles[pos.y][pos.x] {
-                        Tile::Invalid => {
-                            skip = true;
-                        }
-                        _ => {}
-                    }
-                }
-                if skip {
+                if wall_breaks_path(&mut game, p1, &board_p1, x, y, orientation) {
                     println!(
-                        "Breaks path: {:?}",
+                        "Breaks path: {:?} {:?}",
+                        p1,
+                        PlayerMove::PlaceWall {
+                            orientation,
+                            position,
+                        }
+                    );
+                    continue;
+                }
+                if wall_breaks_path(&mut game, p2, &board_p2, x, y, orientation) {
+                    println!(
+                        "Breaks path: {:?} {:?}",
+                        p2,
                         PlayerMove::PlaceWall {
                             orientation,
                             position,
@@ -387,4 +331,84 @@ fn wall_untouched(walls: &Walls, orientation: WallOrientation, position: &WallPo
 fn wall_ends_at(walls: &Walls, position: &WallPosition) -> bool {
     wall_collide(walls, WallOrientation::Horizontal, position)
         || wall_collide(walls, WallOrientation::Vertical, position)
+}
+
+fn wall_breaks_path(
+    game: &mut Game,
+    player: Player,
+    board: &Board,
+    x: usize,
+    y: usize,
+    orientation: WallOrientation,
+) -> bool {
+    let mut board = Board {
+        tiles: board.tiles.clone(),
+    };
+    game.board.walls.0[x][y] = Some(orientation);
+
+    let candidates = [(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)]
+        .into_iter()
+        .zip(match orientation {
+            WallOrientation::Horizontal => [Dir::PosY, Dir::PosY, Dir::NegY, Dir::NegY],
+            WallOrientation::Vertical => [Dir::PosX, Dir::NegX, Dir::PosX, Dir::NegX],
+        });
+
+    let mut invalids: Vec<(usize, usize)> = Vec::new();
+    for ((x, y), towards_wall) in candidates {
+        match board.tiles[y][x] {
+            Tile::Valid(dir, _) => {
+                if dir == towards_wall {
+                    board_propagate_invalid(&mut board, &mut invalids, x, y);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    {
+        let mut queue = [(0, 0); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
+        let mut queue_len = 0;
+        let mut seen = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
+
+        for invalid in invalids {
+            for dir in [Dir::PosX, Dir::PosY, Dir::NegX, Dir::NegY] {
+                if !dir.can_apply(invalid) {
+                    continue;
+                }
+                let (x, y) = dir.apply(invalid);
+
+                if seen[y][x] {
+                    continue;
+                }
+                seen[y][x] = true;
+
+                let dx = x as i8 - invalid.0 as i8;
+                let dy = y as i8 - invalid.1 as i8;
+                if wall_blocks(&game.board.walls, invalid.0, invalid.1, dx, dy) {
+                    continue;
+                }
+
+                match board.tiles[y][x] {
+                    Tile::Valid(_, _) => {
+                        queue[queue_len] = (x, y);
+                        queue_len += 1;
+                    }
+                    _ => {}
+                };
+            }
+        }
+
+        bfs(&game.board.walls, &mut board, queue, queue_len);
+    }
+    game.board.walls.0[x][y] = None;
+
+    let pos = game.board.player_position(player);
+    match board.tiles[pos.y][pos.x] {
+        Tile::Invalid => {
+            return true;
+        }
+        _ => {}
+    }
+
+    return false;
 }
