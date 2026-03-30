@@ -71,7 +71,7 @@ fn _minimax(
 
 fn heuristic(game: &Game) -> isize {
     match game.player {
-        Player::White => heuristic_board_score(game),
-        Player::Black => -heuristic_board_score(game),
+        Player::White => 0, //heuristic_board_score(game),
+        Player::Black => 0, //-heuristic_board_score(game),
     }
 }
