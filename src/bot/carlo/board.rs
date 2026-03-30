@@ -10,7 +10,6 @@ use super::path::{Dir, PathBlock};
 pub struct Board {
     game: Game,
     path: [[(PathBlock, u8); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
-    visited: [[bool; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
 }
 
 impl Debug for Board {
@@ -30,7 +29,6 @@ impl From<&Game> for Board {
         let game = game.clone();
 
         let mut path = [[(PathBlock::Unreachable, 255); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
-        let mut visited = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
         let mut queue = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
         let mut queue_len = 0;
 
@@ -43,25 +41,16 @@ impl From<&Game> for Board {
             };
             for x in 0..PIECE_GRID_HEIGHT {
                 if x == player_pos.x && y == player_pos.y {
-                    return Board {
-                        game,
-                        path,
-                        visited,
-                    };
+                    return Board { game, path };
                 }
 
                 path[y][x] = (PathBlock::Goal, 0);
-                visited[y][x] = true;
                 queue[queue_len] = (x as i8, y as i8);
                 queue_len += 1;
             }
         }
 
-        let mut board = Board {
-            game,
-            path,
-            visited,
-        };
+        let mut board = Board { game, path };
         board.bfs(queue, queue_len);
 
         board
@@ -143,14 +132,13 @@ impl Board {
                 let nx = x + dx;
                 let ny = y + dy;
 
-                if self.visited[ny as usize][nx as usize] {
+                if self.path[ny as usize][nx as usize].0 != PathBlock::Unreachable {
                     continue;
                 }
 
                 let dist = self.path[y as usize][x as usize].1 + 1;
                 let dir = PathBlock::Dir(Dir::from((dx, dy)).reverse());
                 self.path[ny as usize][nx as usize] = (dir, dist);
-                self.visited[ny as usize][nx as usize] = true;
 
                 if nx as usize == player_pos.x && y as usize == player_pos.y {
                     break 'queue;
@@ -188,7 +176,6 @@ impl Board {
         while i < invalid_q_len {
             let (x, y) = invalid_q[i];
 
-            self.visited[y as usize][x as usize] = false;
             self.path[y as usize][x as usize] = (PathBlock::Unreachable, 255);
 
             for (dx, dy) in board_neighbors(&self.game, x, y) {
