@@ -49,6 +49,7 @@ impl Bot for Carlo {
                 }) = parse_player_move(&m)
                 {
                     let mut board = board::Board::from(&session.game);
+                    println!("{:?}", board);
                     board.place_wall(position.x, position.y, orientation);
                     println!("{:?}", board)
                 }
