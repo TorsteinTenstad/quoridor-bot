@@ -92,9 +92,7 @@ fn _minimax(
     let pos_p2 = game.board.player_position(game.player.opponent());
 
     if depth <= 0 {
-        let t1 = board_p1.tiles[pos_p1.y][pos_p1.x];
-        let t2 = board_p2.tiles[pos_p2.y][pos_p2.x];
-        let h = heuristic(game, t1, t2);
+        let h = heuristic(game, &board_p1, &board_p2);
         return Some((None, h));
     }
 
@@ -182,28 +180,28 @@ fn _minimax(
     Some((move_best, h_best))
 }
 
-fn heuristic(game: &Game, t1: Tile, t2: Tile) -> isize {
-    let p1_dis = match t1 {
-        Tile::Invalid => return -INF,
+fn heuristic(game: &Game, b1: &Board, b2: &Board) -> isize {
+    _heuristic(game, game.player, b1) - _heuristic(game, game.player.opponent(), b2)
+}
+
+fn _heuristic(game: &Game, player: Player, board: &Board) -> isize {
+    let pos = game.board.player_position(player);
+    let tile = board.tiles[pos.y][pos.x];
+
+    let dis = match tile {
+        Tile::Invalid => {
+            unreachable!()
+        }
         Tile::Valid(_, dis) => dis,
     };
-    let p2_dis = match t2 {
-        Tile::Invalid => return INF,
-        Tile::Valid(_, dis) => dis,
-    };
-    if p1_dis == 0 {
+    if dis == 0 {
         return INF;
-    }
-    if p2_dis == 0 {
-        return -INF;
     }
 
     let mut h: isize = 0;
 
-    h -= (p1_dis as isize) * 10;
-    h += (p2_dis as isize) * 10;
-    h += game.walls_left[game.player.as_index()] as isize;
-    h -= game.walls_left[game.player.opponent().as_index()] as isize;
+    h -= (dis as isize) * 10;
+    h += game.walls_left[player.as_index()] as isize;
 
     h
 }
