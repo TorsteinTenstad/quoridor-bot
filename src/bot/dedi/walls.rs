@@ -198,7 +198,7 @@ fn get_wall_moves(game: &Game) -> Vec<PlayerMove> {
                     match board.tiles[y][x] {
                         Tile::Valid(dir, _) => {
                             if dir == towards_wall {
-                                board_propogate_invalid(&mut board, x, y);
+                                board_propagate_invalid(&mut board, x, y);
                             }
                         }
                         _ => {}
@@ -258,7 +258,7 @@ fn get_wall_moves(game: &Game) -> Vec<PlayerMove> {
     wall_moves
 }
 
-fn board_propogate_invalid(board: &mut Board, x: usize, y: usize) {
+fn board_propagate_invalid(board: &mut Board, x: usize, y: usize) {
     board.tiles[y][x] = Tile::Invalid;
 
     for dir_out in [Dir::PosX, Dir::PosY, Dir::NegX, Dir::NegY] {
@@ -270,7 +270,7 @@ fn board_propogate_invalid(board: &mut Board, x: usize, y: usize) {
         match board.tiles[y][x] {
             Tile::Valid(dir_in, _) => {
                 if dir_in == dir_out.reverse() {
-                    board_propogate_invalid(board, x, y);
+                    board_propagate_invalid(board, x, y);
                 }
             }
             _ => {}
