@@ -69,15 +69,75 @@ impl From<&Game> for Board {
 }
 
 impl Board {
+    // Performs BFS search from the elements of the queue. Elements must be increasing in distance to goal.
     fn bfs(
         &mut self,
-        mut queue: [(i8, i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT],
-        mut queue_len: usize,
+        in_queue: [(i8, i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT],
+        in_queue_len: usize,
     ) {
+        let mut queue = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
+        let mut queue_len = 0;
+
         let player_pos = self.game.board.player_position(self.game.player);
 
         let mut i = 0;
-        'queue: while i < queue_len {
+        let mut in_queue_i = 0;
+        let mut iter_dist = self.path[in_queue[0].1 as usize][in_queue[0].0 as usize].1;
+        'queue: while i < queue_len || in_queue_i < in_queue_len {
+            // println!("pd: {}", iter_dist);
+            // print!("q: ");
+            // for j in i..queue_len {
+            //     print!(
+            //         "{} ({},{}) ",
+            //         self.path[queue[j].1 as usize][queue[j].0 as usize].1, queue[j].0, queue[j].1
+            //     )
+            // }
+            // println!();
+            // print!("i: ");
+            // for j in in_queue_i..in_queue_len {
+            //     print!(
+            //         "{} ({},{}) ",
+            //         self.path[in_queue[j].1 as usize][in_queue[j].0 as usize].1,
+            //         in_queue[j].0,
+            //         in_queue[j].1,
+            //     )
+            // }
+            // println!("\n");
+
+            while in_queue_i < in_queue_len
+                && (i == queue_len
+                    || self.path[in_queue[in_queue_i].1 as usize][in_queue[in_queue_i].0 as usize]
+                        .1
+                        == iter_dist)
+            {
+                iter_dist =
+                    self.path[in_queue[in_queue_i].1 as usize][in_queue[in_queue_i].0 as usize].1;
+
+                queue[queue_len] = in_queue[in_queue_i];
+                queue_len += 1;
+                in_queue_i += 1;
+            }
+
+            // println!("d: {}", iter_dist);
+            // print!("q: ");
+            // for j in i..queue_len {
+            //     print!(
+            //         "{} ({},{}) ",
+            //         self.path[queue[j].1 as usize][queue[j].0 as usize].1, queue[j].0, queue[j].1
+            //     )
+            // }
+            // println!();
+            // print!("i: ");
+            // for j in in_queue_i..in_queue_len {
+            //     print!(
+            //         "{} ({},{}) ",
+            //         self.path[in_queue[j].1 as usize][in_queue[j].0 as usize].1,
+            //         in_queue[j].0,
+            //         in_queue[j].1,
+            //     )
+            // }
+            // println!("\n");
+
             let (x, y) = queue[i];
             for (dx, dy) in board_neighbors(&self.game, x, y) {
                 let nx = x + dx;
@@ -90,12 +150,13 @@ impl Board {
                 let dist = self.path[y as usize][x as usize].1 + 1;
                 let dir = PathBlock::Dir(Dir::from((dx, dy)).reverse());
                 self.path[ny as usize][nx as usize] = (dir, dist);
+                self.visited[ny as usize][nx as usize] = true;
 
                 if nx as usize == player_pos.x && y as usize == player_pos.y {
                     break 'queue;
                 }
 
-                self.visited[ny as usize][nx as usize] = true;
+                iter_dist = dist;
                 queue[queue_len] = (nx, ny);
                 queue_len += 1;
             }
@@ -123,9 +184,6 @@ impl Board {
             }
         }
 
-        let mut search_q = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
-        let mut search_q_len = 0;
-
         let mut i = 0;
         while i < invalid_q_len {
             let (x, y) = invalid_q[i];
@@ -147,36 +205,68 @@ impl Board {
             i += 1;
         }
 
-        let mut in_q = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
+        let mut border_q = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
+        let mut border_q_len = 0;
+        let mut border_q_contains = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
+
+        // Seed BFS with best neighbor (if any) of all invalid squares.
         let mut i = 0;
         while i < invalid_q_len {
             let (x, y) = invalid_q[i];
             let mut best_neighbor: Option<((i8, i8), u8)> = None;
+
             for (dx, dy) in board_neighbors(&self.game, x, y) {
                 let nx = x + dx;
                 let ny = y + dy;
 
                 if self.path[ny as usize][nx as usize].0 != PathBlock::Unreachable {
                     let dist = self.path[ny as usize][nx as usize].1;
-                    if dist < best_neighbor.unwrap_or(((0, 0), 255)).1 {
+                    if best_neighbor.map(|n| dist < n.1).unwrap_or(true) {
                         best_neighbor = Some(((nx, ny), dist));
                     }
                 }
             }
 
             if let Some(((nx, ny), _)) = best_neighbor
-                && !in_q[ny as usize][nx as usize]
+                && !border_q_contains[ny as usize][nx as usize]
             {
-                in_q[ny as usize][nx as usize] = true;
-                search_q[search_q_len] = (nx, ny);
-                search_q_len += 1;
+                border_q_contains[ny as usize][nx as usize] = true;
+                border_q[border_q_len] = (nx, ny);
+                border_q_len += 1;
             }
 
             i += 1;
         }
 
-        // TODO: search queue contains squares with different distances to goal.
-        self.bfs(search_q, search_q_len);
+        // println!("{:?}", self);
+
+        let mut bfs_q = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
+        let mut bfs_q_len = 0;
+        // Sorted insert into seeded bfs queue.
+        {
+            let mut mi = 255;
+            let mut ma = 0;
+            for i in 0..border_q_len {
+                let d = self.path[border_q[i].1 as usize][border_q[i].0 as usize].1;
+                if d < mi {
+                    mi = d;
+                }
+                if d > ma {
+                    ma = d;
+                }
+            }
+
+            for d in mi..=ma {
+                for i in 0..border_q_len {
+                    if d == self.path[border_q[i].1 as usize][border_q[i].0 as usize].1 {
+                        bfs_q[bfs_q_len] = border_q[i];
+                        bfs_q_len += 1;
+                    }
+                }
+            }
+        }
+
+        self.bfs(bfs_q, bfs_q_len);
     }
 }
 
