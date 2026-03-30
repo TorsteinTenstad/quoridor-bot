@@ -147,7 +147,10 @@ impl Board {
             i += 1;
         }
 
-        for (x, y) in invalid_q {
+        let mut in_q = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
+        let mut i = 0;
+        while i < invalid_q_len {
+            let (x, y) = invalid_q[i];
             let mut best_neighbor: Option<((i8, i8), u8)> = None;
             for (dx, dy) in board_neighbors(&self.game, x, y) {
                 let nx = x + dx;
@@ -161,10 +164,15 @@ impl Board {
                 }
             }
 
-            if let Some(((nx, ny), _)) = best_neighbor {
+            if let Some(((nx, ny), _)) = best_neighbor
+                && !in_q[ny as usize][nx as usize]
+            {
+                in_q[ny as usize][nx as usize] = true;
                 search_q[search_q_len] = (nx, ny);
                 search_q_len += 1;
             }
+
+            i += 1;
         }
 
         // TODO: search queue contains squares with different distances to goal.
