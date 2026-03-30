@@ -1,8 +1,9 @@
-mod walls;
+pub mod minimax;
+pub mod walls;
 
 use crate::{
     bot::{Bot, dedi::walls::get_move},
-    data_model::{Direction, Game, MovePiece, PlayerMove},
+    data_model::{Game, PlayerMove},
     session::Session,
 };
 
@@ -12,13 +13,9 @@ pub struct Dedi {}
 impl Bot for Dedi {
     type Command = DediCommand;
 
-    fn get_move(&mut self, _: &Game) -> PlayerMove {
-        PlayerMove::MovePiece({
-            MovePiece {
-                direction: Direction::Down,
-                direction_on_collision: Direction::Down,
-            }
-        })
+    fn get_move(&mut self, game: &Game) -> PlayerMove {
+        let (m, _) = minimax::minimax(game, 3);
+        m.unwrap()
     }
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {

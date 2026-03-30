@@ -2,6 +2,7 @@ use crate::data_model::{
     Game, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, Player, PlayerMove, WALL_GRID_HEIGHT,
     WALL_GRID_WIDTH, WallOrientation, WallPosition, Walls,
 };
+use std::collections::VecDeque;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum Dir {
@@ -62,8 +63,7 @@ fn get_board(game: &Game, player: Player) -> Board {
         tiles: [[Tile::Invalid; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
     };
 
-    let mut queue = [(0, 0); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
-    let mut queue_len = 0;
+    let mut queue: VecDeque<(usize, usize)> = VecDeque::new();
 
     let y_target = match player {
         Player::Black => 0,
@@ -71,24 +71,16 @@ fn get_board(game: &Game, player: Player) -> Board {
     };
     for x in 0..PIECE_GRID_WIDTH {
         board.tiles[y_target][x] = Tile::Valid(Dir::None, 0);
-        queue[queue_len] = (x, y_target);
-        queue_len += 1;
+        queue.push_back((x, y_target));
     }
 
-    bfs(&game.board.walls, &mut board, queue, queue_len);
+    bfs(&game.board.walls, &mut board, queue);
 
     board
 }
 
-fn bfs(
-    walls: &Walls,
-    board: &mut Board,
-    mut queue: [(usize, usize); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT],
-    mut queue_len: usize,
-) {
-    let mut i = 0;
-    while i < queue_len {
-        let xy = queue[i];
+fn bfs(walls: &Walls, board: &mut Board, mut queue: VecDeque<(usize, usize)>) {
+    while let Some(xy) = queue.pop_front() {
         let from = board.tiles[xy.1][xy.0];
 
         let distance = match from {
@@ -120,11 +112,8 @@ fn bfs(
             }
 
             board.tiles[y][x] = Tile::Valid(dir.reverse(), distance);
-            queue[queue_len] = (x, y);
-            queue_len += 1;
+            queue.push_back((x, y));
         }
-
-        i += 1;
     }
 }
 
@@ -150,12 +139,16 @@ fn wall_blocks(walls: &Walls, x: usize, y: usize, dx: i8, dy: i8) -> bool {
     false
 }
 
-fn get_wall_moves(game: &Game) -> Vec<PlayerMove> {
+pub fn get_wall_moves(game: &Game) -> Vec<PlayerMove> {
     let mut wall_moves: Vec<PlayerMove> = Vec::new();
-
-    let mut game = game.clone();
     let p1 = game.player;
     let p2 = game.player.opponent();
+
+    if game.walls_left[p1.as_index()] == 0 {
+        return wall_moves;
+    }
+
+    let mut game = game.clone();
     let board_p1 = get_board(&game, p1);
     let board_p2 = get_board(&game, p2);
 
@@ -165,13 +158,13 @@ fn get_wall_moves(game: &Game) -> Vec<PlayerMove> {
                 let position = WallPosition { x, y };
 
                 if wall_collide(&game.board.walls, orientation, &position) {
-                    println!(
-                        "Collision: {:?}",
-                        PlayerMove::PlaceWall {
-                            orientation,
-                            position,
-                        }
-                    );
+                    // println!(
+                    //     "Collision: {:?}",
+                    //     PlayerMove::PlaceWall {
+                    //         orientation,
+                    //         position,
+                    //     }
+                    // );
                     continue;
                 }
 
@@ -184,25 +177,25 @@ fn get_wall_moves(game: &Game) -> Vec<PlayerMove> {
                 }
 
                 if wall_breaks_path(&mut game, p1, &board_p1, x, y, orientation) {
-                    println!(
-                        "Breaks path: {:?} {:?}",
-                        p1,
-                        PlayerMove::PlaceWall {
-                            orientation,
-                            position,
-                        }
-                    );
+                    // println!(
+                    //     "Breaks path: {:?} {:?}",
+                    //     p1,
+                    //     PlayerMove::PlaceWall {
+                    //         orientation,
+                    //         position,
+                    //     }
+                    // );
                     continue;
                 }
                 if wall_breaks_path(&mut game, p2, &board_p2, x, y, orientation) {
-                    println!(
-                        "Breaks path: {:?} {:?}",
-                        p2,
-                        PlayerMove::PlaceWall {
-                            orientation,
-                            position,
-                        }
-                    );
+                    // println!(
+                    //     "Breaks path: {:?} {:?}",
+                    //     p2,
+                    //     PlayerMove::PlaceWall {
+                    //         orientation,
+                    //         position,
+                    //     }
+                    // );
                     continue;
                 }
 
@@ -366,8 +359,7 @@ fn wall_breaks_path(
     }
 
     {
-        let mut queue = [(0, 0); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
-        let mut queue_len = 0;
+        let mut queue: VecDeque<(usize, usize)> = VecDeque::new();
         let mut seen = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
 
         for invalid in invalids {
@@ -390,15 +382,14 @@ fn wall_breaks_path(
 
                 match board.tiles[y][x] {
                     Tile::Valid(_, _) => {
-                        queue[queue_len] = (x, y);
-                        queue_len += 1;
+                        queue.push_back((x, y));
                     }
                     _ => {}
                 };
             }
         }
 
-        bfs(&game.board.walls, &mut board, queue, queue_len);
+        bfs(&game.board.walls, &mut board, queue);
     }
     game.board.walls.0[x][y] = None;
 
