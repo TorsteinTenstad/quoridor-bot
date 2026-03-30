@@ -80,10 +80,6 @@ fn get_board(game: &Game) -> Board {
     board
 }
 
-fn outside(x: usize, y: usize) -> bool {
-    x <= 0 || x >= PIECE_GRID_WIDTH || y <= 0 || y >= PIECE_GRID_HEIGHT
-}
-
 fn bfs(
     walls: &Walls,
     board: &mut Board,
@@ -97,7 +93,7 @@ fn bfs(
 
         let distance = match from {
             Tile::Invalid => {
-                unreachable!()
+                continue;
             }
             Tile::Valid(_, d) => d + 1,
         };
@@ -108,17 +104,19 @@ fn bfs(
             }
             let (x, y) = dir.apply(xy);
 
-            match board.tiles[y][x] {
-                Tile::Valid(_, _) => {
-                    continue;
-                }
-                _ => {}
-            }
-
             let dx = x as i8 - xy.0 as i8;
             let dy = y as i8 - xy.1 as i8;
             if wall_blocks(walls, xy.0, xy.1, dx, dy) {
                 continue;
+            }
+
+            match board.tiles[y][x] {
+                Tile::Valid(_, dis) => {
+                    if dis <= distance {
+                        continue;
+                    }
+                }
+                _ => {}
             }
 
             board.tiles[y][x] = Tile::Valid(dir.reverse(), distance);
@@ -194,41 +192,58 @@ fn get_wall_moves(game: &Game) -> Vec<PlayerMove> {
                         WallOrientation::Vertical => [Dir::PosX, Dir::NegX, Dir::PosX, Dir::NegX],
                     });
 
+                let mut invalids: Vec<(usize, usize)> = Vec::new();
                 for ((x, y), towards_wall) in candidates {
                     match board.tiles[y][x] {
                         Tile::Valid(dir, _) => {
                             if dir == towards_wall {
-                                board_propagate_invalid(&mut board, x, y);
+                                board_propagate_invalid(&mut board, &mut invalids, x, y);
                             }
                         }
                         _ => {}
                     }
                 }
 
-                // TODO: simplify
                 {
                     let mut queue = [(0, 0); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
                     let mut queue_len = 0;
+                    let mut seen = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
 
-                    let y_target = match game.player {
-                        Player::Black => 0,
-                        Player::White => PIECE_GRID_HEIGHT - 1,
-                    };
-                    for x in 0..PIECE_GRID_WIDTH {
-                        board.tiles[y_target][x] = Tile::Valid(Dir::None, 0);
-                        queue[queue_len] = (x, y_target);
-                        queue_len += 1;
+                    for invalid in invalids {
+                        for dir in [Dir::PosX, Dir::PosY, Dir::NegX, Dir::NegY] {
+                            if !dir.can_apply(invalid) {
+                                continue;
+                            }
+                            let (x, y) = dir.apply(invalid);
+
+                            if seen[y][x] {
+                                continue;
+                            }
+                            seen[y][x] = true;
+
+                            let dx = x as i8 - invalid.0 as i8;
+                            let dy = y as i8 - invalid.1 as i8;
+                            if wall_blocks(&game.board.walls, invalid.0, invalid.1, dx, dy) {
+                                continue;
+                            }
+
+                            match board.tiles[y][x] {
+                                Tile::Invalid => {}
+                                Tile::Valid(_, _) => {
+                                    queue[queue_len] = (x, y);
+                                    queue_len += 1;
+                                }
+                            };
+                        }
                     }
 
                     bfs(&game.board.walls, &mut board, queue, queue_len);
                 }
                 game.board.walls.0[position.x][position.y] = None;
 
+                // TODO: this does not work with both players, since target is not the same.
                 let mut skip = false;
-                for pos in [
-                    game.board.player_position(game.player),
-                    game.board.player_position(game.player.opponent()),
-                ] {
+                for pos in [game.board.player_position(game.player)] {
                     match board.tiles[pos.y][pos.x] {
                         Tile::Invalid => {
                             skip = true;
@@ -258,8 +273,14 @@ fn get_wall_moves(game: &Game) -> Vec<PlayerMove> {
     wall_moves
 }
 
-fn board_propagate_invalid(board: &mut Board, x: usize, y: usize) {
+fn board_propagate_invalid(
+    board: &mut Board,
+    collect: &mut Vec<(usize, usize)>,
+    x: usize,
+    y: usize,
+) {
     board.tiles[y][x] = Tile::Invalid;
+    collect.push((x, y));
 
     for dir_out in [Dir::PosX, Dir::PosY, Dir::NegX, Dir::NegY] {
         if !dir_out.can_apply((x, y)) {
@@ -270,7 +291,7 @@ fn board_propagate_invalid(board: &mut Board, x: usize, y: usize) {
         match board.tiles[y][x] {
             Tile::Valid(dir_in, _) => {
                 if dir_in == dir_out.reverse() {
-                    board_propagate_invalid(board, x, y);
+                    board_propagate_invalid(board, collect, x, y);
                 }
             }
             _ => {}
