@@ -1,22 +1,25 @@
-use std::time::{Duration, Instant};
-
 use crate::{
-    bot::dedi::walls::{Tile, get_board, get_wall_moves},
+    bot::dedi::walls::{Board, Tile, get_board, get_wall_moves},
     data_model::{Game, PIECE_GRID_HEIGHT, Player, PlayerMove},
     game_logic::{
-        all_move_piece_moves, execute_move_unchecked,
-        is_move_piece_legal_with_players_at_positions, new_position_after_move_piece_unchecked,
+        all_move_piece_moves, execute_move_unchecked, is_move_piece_legal_with_players_at_positions,
     },
+};
+use std::hash::{Hash, Hasher};
+use std::{
+    collections::HashMap,
+    hash::DefaultHasher,
+    time::{Duration, Instant},
 };
 
 pub const INF: isize = isize::MAX - 1;
 
-pub fn minimax_iterative(game: &Game, duration: Duration) -> Option<PlayerMove> {
+pub fn minimax_iterative(game: &Game, duration: Duration, cache: &mut Cache) -> Option<PlayerMove> {
     let deadline = Some(Instant::now() + duration);
     let mut depth = 1;
     let mut best_move: Option<PlayerMove> = None;
     loop {
-        if let Some((_move, h)) = minimax(game, depth, deadline) {
+        if let Some((_move, h)) = minimax(game, depth, deadline, cache) {
             println!("Found {:?} at level {:?} with h={:?}", _move, depth, h);
             best_move = _move;
             depth += 1;
@@ -28,20 +31,34 @@ pub fn minimax_iterative(game: &Game, duration: Duration) -> Option<PlayerMove> 
     best_move
 }
 
+#[derive(Default)]
+pub struct Cache {
+    table: HashMap<u64, CacheLine>,
+}
+
+#[derive(Clone)]
+pub struct CacheLine {
+    depth: usize,
+    play: Option<PlayerMove>,
+    h: isize,
+}
+
+fn hash_to_u64<T: Hash>(value: &T) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
+
 pub fn minimax(
     game: &Game,
     depth: usize,
     deadline: Option<Instant>,
+    cache: &mut Cache,
 ) -> Option<(Option<PlayerMove>, isize)> {
-    _minimax(
-        game,
-        depth,
-        -INF,
-        INF,
-        Tile::Invalid, // Tile::Invalid is ok as long as depth > 0
-        Tile::Invalid,
-        deadline,
-    )
+    let board_p1 = get_board(game, game.player);
+    let board_p2 = get_board(game, game.player.opponent());
+
+    _minimax(game, depth, -INF, INF, deadline, board_p1, board_p2, cache)
 }
 
 fn target(player: Player) -> usize {
@@ -57,23 +74,34 @@ fn _minimax(
     depth: usize,
     alpha: isize,
     beta: isize,
-    tile_p1: Tile,
-    tile_p2: Tile,
     deadline: Option<Instant>,
+    board_p1: Board,
+    board_p2: Board,
+    cache: &mut Cache,
 ) -> Option<(Option<PlayerMove>, isize)> {
     if deadline.is_some_and(|deadline| Instant::now() > deadline) {
         return None;
     }
-    if depth <= 0 {
-        let h = heuristic(game, tile_p1, tile_p2);
-        return Some((None, h));
-    }
-    let mut moves: Vec<(PlayerMove, Tile, Tile)> = Vec::new();
 
     let p1 = game.player;
     let p2 = game.player.opponent();
     let pos_p1 = game.board.player_position(game.player);
     let pos_p2 = game.board.player_position(game.player.opponent());
+
+    if depth <= 0 {
+        let t1 = board_p1.tiles[pos_p1.y][pos_p1.x];
+        let t2 = board_p2.tiles[pos_p2.y][pos_p2.x];
+        let h = heuristic(game, t1, t2);
+        return Some((None, h));
+    }
+
+    let hash = hash_to_u64(game);
+    if cache.table.contains_key(&hash) {
+        let line = cache.table[&hash].clone();
+        if line.depth >= depth {
+            return Some((line.play, line.h));
+        }
+    }
 
     if pos_p1.y == target(p1) {
         return Some((None, INF));
@@ -82,8 +110,7 @@ fn _minimax(
         return Some((None, -INF));
     }
 
-    let board_p1 = get_board(&game, p1);
-    let board_p2 = get_board(&game, p2);
+    let mut moves: Vec<(PlayerMove, Board, Board)> = Vec::new();
 
     for move_piece in all_move_piece_moves(pos_p1, pos_p2) {
         let legal = is_move_piece_legal_with_players_at_positions(
@@ -94,10 +121,11 @@ fn _minimax(
         );
 
         if legal {
-            let p = new_position_after_move_piece_unchecked(pos_p1, &move_piece, pos_p2);
-            let t1 = board_p1.tiles[p.y][p.x];
-            let t2 = board_p2.tiles[pos_p2.y][pos_p2.x];
-            moves.push((PlayerMove::MovePiece(move_piece), t1, t2));
+            moves.push((
+                PlayerMove::MovePiece(move_piece),
+                board_p1.clone(),
+                board_p2.clone(),
+            ));
         }
     }
 
@@ -113,10 +141,18 @@ fn _minimax(
     let mut h_best = -INF;
     let mut move_best: Option<PlayerMove> = None;
 
-    for (_move, t1, t2) in moves {
+    for (_move, b1, b2) in moves {
         let game_next = execute_move_unchecked(game, &_move);
-        if let Some((_, h_next)) = _minimax(&game_next, depth - 1, -beta, -alpha, t2, t1, deadline)
-        {
+        if let Some((_, h_next)) = _minimax(
+            &game_next,
+            depth - 1,
+            -beta,
+            -alpha,
+            deadline,
+            b2,
+            b1,
+            cache,
+        ) {
             let h_inv = -h_next;
 
             if h_inv > h_best || move_best == None {
@@ -132,6 +168,14 @@ fn _minimax(
         }
     }
 
+    cache.table.insert(
+        hash,
+        CacheLine {
+            depth,
+            play: move_best.clone(),
+            h: h_best,
+        },
+    );
     Some((move_best, h_best))
 }
 

@@ -49,6 +49,7 @@ pub enum Tile {
     Valid(Dir, u8),
 }
 
+#[derive(Clone)]
 pub struct Board {
     pub tiles: [[Tile; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
 }
@@ -138,7 +139,7 @@ fn wall_blocks(walls: &Walls, x: usize, y: usize, dx: i8, dy: i8) -> bool {
 
     false
 }
-pub fn _get_wall_moves(game: &Game) -> Vec<(PlayerMove, Tile, Tile)> {
+pub fn _get_wall_moves(game: &Game) -> Vec<(PlayerMove, Board, Board)> {
     let p1 = game.player;
     let p2 = game.player.opponent();
 
@@ -152,8 +153,8 @@ pub fn get_wall_moves(
     game: &Game,
     board_p1: &Board,
     board_p2: &Board,
-) -> Vec<(PlayerMove, Tile, Tile)> {
-    let mut wall_moves: Vec<(PlayerMove, Tile, Tile)> = Vec::new();
+) -> Vec<(PlayerMove, Board, Board)> {
+    let mut wall_moves: Vec<(PlayerMove, Board, Board)> = Vec::new();
 
     let p1 = game.player;
     let p2 = game.player.opponent();
@@ -171,10 +172,8 @@ pub fn get_wall_moves(
                     continue;
                 }
 
-                let pos1 = game.board.player_position(p1);
-                let mut tile1 = board_p1.tiles[pos1.y][pos1.x];
-                let pos2 = game.board.player_position(p2);
-                let mut tile2 = board_p2.tiles[pos2.y][pos2.x];
+                let pos1 = game.board.player_position(p1).clone();
+                let pos2 = game.board.player_position(p2).clone();
 
                 if wall_untouched(&game.board.walls, orientation, &position) {
                     wall_moves.push((
@@ -182,23 +181,26 @@ pub fn get_wall_moves(
                             orientation,
                             position,
                         },
-                        tile1,
-                        tile2,
+                        board_p1.clone(),
+                        board_p2.clone(),
                     ));
                     continue;
                 }
 
-                match player_tile_after_wall(&mut game, p1, &board_p1, x, y, orientation) {
+                let board_p1 = board_after_wall(&mut game, &board_p1, x, y, orientation);
+                match board_p1.tiles[pos1.y][pos1.x] {
                     Tile::Invalid => {
                         continue;
                     }
-                    Tile::Valid(dir, dis) => tile1 = Tile::Valid(dir, dis),
+                    _ => {}
                 }
-                match player_tile_after_wall(&mut game, p2, &board_p2, x, y, orientation) {
+
+                let board_p2 = board_after_wall(&mut game, &board_p2, x, y, orientation);
+                match board_p2.tiles[pos2.y][pos2.x] {
                     Tile::Invalid => {
                         continue;
                     }
-                    Tile::Valid(dir, dis) => tile2 = Tile::Valid(dir, dis),
+                    _ => {}
                 }
 
                 wall_moves.push((
@@ -206,8 +208,8 @@ pub fn get_wall_moves(
                         orientation,
                         position,
                     },
-                    tile1,
-                    tile2,
+                    board_p1,
+                    board_p2,
                 ));
             }
         }
@@ -332,17 +334,14 @@ fn wall_ends_at(walls: &Walls, position: &WallPosition) -> bool {
         || wall_collide(walls, WallOrientation::Vertical, position)
 }
 
-fn player_tile_after_wall(
+fn board_after_wall(
     game: &mut Game,
-    player: Player,
     board: &Board,
     x: usize,
     y: usize,
     orientation: WallOrientation,
-) -> Tile {
-    let mut board = Board {
-        tiles: board.tiles.clone(),
-    };
+) -> Board {
+    let mut board = board.clone();
     game.board.walls.0[x][y] = Some(orientation);
 
     let candidates = [(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)]
@@ -399,6 +398,5 @@ fn player_tile_after_wall(
     }
     game.board.walls.0[x][y] = None;
 
-    let pos = game.board.player_position(player);
-    return board.tiles[pos.y][pos.x];
+    board
 }

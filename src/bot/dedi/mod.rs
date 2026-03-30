@@ -5,7 +5,10 @@ use std::time::Duration;
 
 use crate::{
     args,
-    bot::{Bot, dedi::walls::get_move},
+    bot::{
+        Bot,
+        dedi::{minimax::Cache, walls::get_move},
+    },
     data_model::{Game, PlayerMove},
     session::Session,
 };
@@ -14,6 +17,7 @@ use crate::{
 pub struct Dedi {
     default_depth: Option<usize>,
     default_seconds: Option<u64>,
+    cache: Cache,
 }
 
 impl Dedi {
@@ -31,7 +35,7 @@ impl Bot for Dedi {
             .default_seconds
             .map(Duration::from_secs)
             .unwrap_or(Duration::from_secs(3));
-        minimax::minimax_iterative(game, duration).unwrap()
+        minimax::minimax_iterative(game, duration, &mut self.cache).unwrap()
     }
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
