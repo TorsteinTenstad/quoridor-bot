@@ -10,6 +10,8 @@ use super::path::{Dir, PathBlock};
 pub struct Board {
     game: Game,
     path: [[(PathBlock, u8); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
+    wall_moves: [[[bool; 2]; WALL_GRID_WIDTH]; WALL_GRID_HEIGHT],
+    wall_move_count: usize,
 }
 
 impl Debug for Board {
@@ -32,25 +34,34 @@ impl From<&Game> for Board {
         let mut queue = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
         let mut queue_len = 0;
 
-        let player_pos = game.board.player_position(game.player);
-
         {
             let y = match game.player {
                 Player::Black => 0,
                 Player::White => PIECE_GRID_HEIGHT - 1,
             };
             for x in 0..PIECE_GRID_HEIGHT {
-                if x == player_pos.x && y == player_pos.y {
-                    return Board { game, path };
-                }
-
                 path[y][x] = (PathBlock::Goal, 0);
                 queue[queue_len] = (x as i8, y as i8);
                 queue_len += 1;
             }
         }
 
-        let mut board = Board { game, path };
+        let mut board = Board {
+            game,
+            path,
+            wall_moves: [[[true, true]; WALL_GRID_WIDTH]; WALL_GRID_HEIGHT],
+            wall_move_count: 2 * WALL_GRID_WIDTH * WALL_GRID_HEIGHT,
+        };
+
+        for x in 0..WALL_GRID_WIDTH {
+            for y in 0..WALL_GRID_HEIGHT {
+                match board.game.board.walls.0[x][y] {
+                    Some(orientation) => board.place_wall(x, y, orientation),
+                    None => {}
+                }
+            }
+        }
+
         board.bfs(queue, queue_len);
 
         board
@@ -154,7 +165,44 @@ impl Board {
     }
 
     pub fn place_wall(&mut self, x: usize, y: usize, orientation: WallOrientation) {
+        if !self.wall_moves[y][x][match orientation {
+            WallOrientation::Horizontal => 0,
+            WallOrientation::Vertical => 1,
+        }] {
+            panic!("wall already removed");
+        }
+
         self.game.board.walls.0[x][y] = Some(orientation);
+
+        self.wall_moves[y][x][0] = false;
+        self.wall_moves[y][x][1] = false;
+        self.wall_move_count -= 2;
+        match orientation {
+            WallOrientation::Horizontal => {
+                if x > 0 {
+                    self.wall_moves[y][x - 1][0] = false;
+                    self.wall_move_count -= 1;
+                }
+                if x < WALL_GRID_WIDTH - 1 {
+                    self.wall_moves[y][x + 1][0] = false;
+                    self.wall_move_count -= 1;
+                }
+            }
+            WallOrientation::Vertical => {
+                if y > 0 {
+                    self.wall_moves[y - 1][x][0] = false;
+                    self.wall_move_count -= 1;
+                }
+                if y < WALL_GRID_HEIGHT - 1 {
+                    self.wall_moves[y + 1][x][0] = false;
+                    self.wall_move_count -= 1;
+                }
+            }
+        }
+    }
+
+    pub fn recalculate_bfs(&mut self, x: usize, y: usize, orientation: WallOrientation) {
+        self.place_wall(x, y, orientation);
 
         let mut invalid_q = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
         let mut invalid_q_len = 0;

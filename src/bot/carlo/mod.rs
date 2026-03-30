@@ -50,7 +50,7 @@ impl Bot for Carlo {
                 {
                     let mut board = board::Board::from(&session.game);
                     println!("{:?}", board);
-                    board.place_wall(position.x, position.y, orientation);
+                    board.recalculate_bfs(position.x, position.y, orientation);
                     println!("{:?}", board)
                 }
             }
