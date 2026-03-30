@@ -14,7 +14,7 @@ impl Bot for Dedi {
     type Command = DediCommand;
 
     fn get_move(&mut self, game: &Game) -> PlayerMove {
-        let (m, _) = minimax::minimax(game, 4);
+        let (m, _) = minimax::minimax(game, 5);
         m.unwrap()
     }
 

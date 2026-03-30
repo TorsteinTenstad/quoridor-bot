@@ -49,16 +49,16 @@ pub enum Tile {
     Valid(Dir, u8),
 }
 
-struct Board {
-    tiles: [[Tile; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
+pub struct Board {
+    pub tiles: [[Tile; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
 }
 
 pub fn get_move(game: &Game) {
-    let wall_moves = get_wall_moves(game);
+    let wall_moves = _get_wall_moves(game);
     println!("count: {:?}", wall_moves.len());
 }
 
-fn get_board(game: &Game, player: Player) -> Board {
+pub fn get_board(game: &Game, player: Player) -> Board {
     let mut board = Board {
         tiles: [[Tile::Invalid; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
     };
@@ -138,19 +138,29 @@ fn wall_blocks(walls: &Walls, x: usize, y: usize, dx: i8, dy: i8) -> bool {
 
     false
 }
-
-pub fn get_wall_moves(game: &Game) -> Vec<PlayerMove> {
-    let mut wall_moves: Vec<PlayerMove> = Vec::new();
+pub fn _get_wall_moves(game: &Game) -> Vec<(PlayerMove, Tile, Tile)> {
     let p1 = game.player;
     let p2 = game.player.opponent();
 
+    let board_p1 = get_board(&game, p1);
+    let board_p2 = get_board(&game, p2);
+
+    get_wall_moves(game, &board_p1, &board_p2)
+}
+
+pub fn get_wall_moves(
+    game: &Game,
+    board_p1: &Board,
+    board_p2: &Board,
+) -> Vec<(PlayerMove, Tile, Tile)> {
+    let mut wall_moves: Vec<(PlayerMove, Tile, Tile)> = Vec::new();
+
+    let p1 = game.player;
+    let p2 = game.player.opponent();
     if game.walls_left[p1.as_index()] == 0 {
         return wall_moves;
     }
-
     let mut game = game.clone();
-    let board_p1 = get_board(&game, p1);
-    let board_p2 = get_board(&game, p2);
 
     for y in 0..WALL_GRID_HEIGHT {
         for x in 0..WALL_GRID_WIDTH {
@@ -158,51 +168,47 @@ pub fn get_wall_moves(game: &Game) -> Vec<PlayerMove> {
                 let position = WallPosition { x, y };
 
                 if wall_collide(&game.board.walls, orientation, &position) {
-                    // println!(
-                    //     "Collision: {:?}",
-                    //     PlayerMove::PlaceWall {
-                    //         orientation,
-                    //         position,
-                    //     }
-                    // );
                     continue;
                 }
+
+                let pos1 = game.board.player_position(p1);
+                let mut tile1 = board_p1.tiles[pos1.y][pos1.x];
+                let pos2 = game.board.player_position(p2);
+                let mut tile2 = board_p2.tiles[pos2.y][pos2.x];
 
                 if wall_untouched(&game.board.walls, orientation, &position) {
-                    wall_moves.push(PlayerMove::PlaceWall {
+                    wall_moves.push((
+                        PlayerMove::PlaceWall {
+                            orientation,
+                            position,
+                        },
+                        tile1,
+                        tile2,
+                    ));
+                    continue;
+                }
+
+                match player_tile_after_wall(&mut game, p1, &board_p1, x, y, orientation) {
+                    Tile::Invalid => {
+                        continue;
+                    }
+                    Tile::Valid(dir, dis) => tile1 = Tile::Valid(dir, dis),
+                }
+                match player_tile_after_wall(&mut game, p2, &board_p2, x, y, orientation) {
+                    Tile::Invalid => {
+                        continue;
+                    }
+                    Tile::Valid(dir, dis) => tile2 = Tile::Valid(dir, dis),
+                }
+
+                wall_moves.push((
+                    PlayerMove::PlaceWall {
                         orientation,
                         position,
-                    });
-                    continue;
-                }
-
-                if wall_breaks_path(&mut game, p1, &board_p1, x, y, orientation) {
-                    // println!(
-                    //     "Breaks path: {:?} {:?}",
-                    //     p1,
-                    //     PlayerMove::PlaceWall {
-                    //         orientation,
-                    //         position,
-                    //     }
-                    // );
-                    continue;
-                }
-                if wall_breaks_path(&mut game, p2, &board_p2, x, y, orientation) {
-                    // println!(
-                    //     "Breaks path: {:?} {:?}",
-                    //     p2,
-                    //     PlayerMove::PlaceWall {
-                    //         orientation,
-                    //         position,
-                    //     }
-                    // );
-                    continue;
-                }
-
-                wall_moves.push(PlayerMove::PlaceWall {
-                    orientation,
-                    position,
-                });
+                    },
+                    tile1,
+                    tile2,
+                ));
             }
         }
     }
@@ -326,14 +332,14 @@ fn wall_ends_at(walls: &Walls, position: &WallPosition) -> bool {
         || wall_collide(walls, WallOrientation::Vertical, position)
 }
 
-fn wall_breaks_path(
+fn player_tile_after_wall(
     game: &mut Game,
     player: Player,
     board: &Board,
     x: usize,
     y: usize,
     orientation: WallOrientation,
-) -> bool {
+) -> Tile {
     let mut board = Board {
         tiles: board.tiles.clone(),
     };
@@ -394,12 +400,5 @@ fn wall_breaks_path(
     game.board.walls.0[x][y] = None;
 
     let pos = game.board.player_position(player);
-    match board.tiles[pos.y][pos.x] {
-        Tile::Invalid => {
-            return true;
-        }
-        _ => {}
-    }
-
-    return false;
+    return board.tiles[pos.y][pos.x];
 }
