@@ -23,6 +23,9 @@ pub fn minimax_iterative(game: &Game, duration: Duration, cache: &mut Cache) -> 
             println!("Found {:?} at level {:?} with h={:?}", _move, depth, h);
             best_move = _move;
             depth += 1;
+            if h == INF || h == -INF {
+                break;
+            }
         } else {
             break;
         }

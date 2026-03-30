@@ -203,14 +203,17 @@ pub fn get_wall_moves(
                     _ => {}
                 }
 
-                wall_moves.push((
-                    PlayerMove::PlaceWall {
-                        orientation,
-                        position,
-                    },
-                    board_p1,
-                    board_p2,
-                ));
+                wall_moves.insert(
+                    0,
+                    (
+                        PlayerMove::PlaceWall {
+                            orientation,
+                            position,
+                        },
+                        board_p1,
+                        board_p2,
+                    ),
+                );
             }
         }
     }
@@ -294,34 +297,46 @@ fn wall_untouched(walls: &Walls, orientation: WallOrientation, position: &WallPo
     match orientation {
         WallOrientation::Horizontal => {
             if x == 0 {
-                touches += 1
+                touches += 1;
             } else if x == WALL_GRID_WIDTH - 1 {
-                touches += 1
+                touches += 1;
             }
             if wall_ends_at(walls, &WallPosition { x, y }) {
-                touches += 1
+                touches += 1;
+                if touches > 1 {
+                    return false;
+                }
             }
             if x > 0 && wall_ends_at(walls, &WallPosition { x: x - 1, y }) {
-                touches += 1
+                touches += 1;
+                if touches > 1 {
+                    return false;
+                }
             }
             if x < WALL_GRID_WIDTH - 1 && wall_ends_at(walls, &WallPosition { x: x + 1, y }) {
-                touches += 1
+                touches += 1;
             }
         }
         WallOrientation::Vertical => {
             if y == 0 {
-                touches += 1
+                touches += 1;
             } else if y == WALL_GRID_WIDTH - 1 {
-                touches += 1
+                touches += 1;
             }
             if wall_ends_at(walls, &WallPosition { x, y }) {
-                touches += 1
+                touches += 1;
+                if touches > 1 {
+                    return false;
+                }
             }
             if y > 0 && wall_ends_at(walls, &WallPosition { x, y: y - 1 }) {
-                touches += 1
+                touches += 1;
+                if touches > 1 {
+                    return false;
+                }
             }
             if y < WALL_GRID_HEIGHT - 1 && wall_ends_at(walls, &WallPosition { x, y: y + 1 }) {
-                touches += 1
+                touches += 1;
             }
         }
     }
