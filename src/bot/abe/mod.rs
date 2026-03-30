@@ -12,6 +12,7 @@ use crate::{
         all_move_piece_moves, execute_move_unchecked, is_move_legal, is_move_piece_legal,
         room_for_wall_placement,
     },
+    l_p_a_star::Pathfinding,
     render_board,
     session::Session,
     square_outline_iterator::SquareOutlineIterator,
@@ -106,9 +107,9 @@ impl Bot for Abe {
                     seconds.map(Duration::from_secs),
                     &mut self.cache,
                 );
-                let m = best_moves.into_iter().last().unwrap().best_move;
-                println!("{} {:?}", m, duration);
-                session.make_move(m)
+                let eval = best_moves.into_iter().last().unwrap();
+                println!("{} {:?}", eval, duration);
+                session.make_move(eval.best_move)
             }
             AbeCommand::Eval {
                 move_to_evaluate,
@@ -171,21 +172,18 @@ impl Bot for Abe {
 pub const WHITE_LOSES_BLACK_WINS: isize = isize::MIN + 1;
 pub const WHITE_WINS_BLACK_LOSES: isize = -WHITE_LOSES_BLACK_WINS;
 
-pub fn heuristic_board_score(game: &Game) -> isize {
-    let black_path = a_star(&game.board, Player::Black);
-    let white_path = a_star(&game.board, Player::White);
-    if white_path.is_none() {
-        println!(
-            "{:?} has no path in the following board:\n{}",
-            Player::White,
-            render_board::render_board(&game.board)
-        );
-    }
-    let black_distance = black_path.unwrap().len() as isize;
+pub fn heuristic_board_score(game: &Game, pathfinding: &mut Pathfinding) -> isize {
+    let black_distance = pathfinding
+        .black
+        .distance_to_goal(game.board.player_position(Player::Black))
+        as isize;
     if black_distance == 0 {
         return WHITE_LOSES_BLACK_WINS;
     }
-    let white_distance = white_path.unwrap().len() as isize;
+    let white_distance = pathfinding
+        .white
+        .distance_to_goal(game.board.player_position(Player::White))
+        as isize;
     if white_distance == 0 {
         return WHITE_WINS_BLACK_LOSES;
     }
@@ -223,6 +221,7 @@ pub fn best_move_alpha_beta_iterative_deepening(
     let deadline = Some(Instant::now() + search_duration);
     let mut best_moves: Vec<BoardEvaluation> = Default::default();
     let mut depth = 0;
+    let mut pathfinding = Pathfinding::new(&game.board);
     loop {
         let search_first = best_moves
             .iter()
@@ -236,6 +235,7 @@ pub fn best_move_alpha_beta_iterative_deepening(
             &search_first,
             deadline,
             cache,
+            &mut pathfinding,
         ) {
             AlphaBetaResult::Stopped => {
                 break best_moves;
@@ -248,6 +248,7 @@ pub fn best_move_alpha_beta_iterative_deepening(
     }
 }
 pub fn best_move_alpha_beta(game: &Game, depth: usize, cache: &mut Cache) -> Vec<BoardEvaluation> {
+    let mut pathfinding = Pathfinding::new(&game.board);
     match alpha_beta(
         game,
         depth,
@@ -256,6 +257,7 @@ pub fn best_move_alpha_beta(game: &Game, depth: usize, cache: &mut Cache) -> Vec
         Default::default(),
         None,
         cache,
+        &mut pathfinding,
     ) {
         AlphaBetaResult::Stopped => unreachable!(),
         AlphaBetaResult::Moves((_, moves)) => moves,
@@ -297,6 +299,7 @@ fn alpha_beta(
     search_first: &[PlayerMove],
     deadline: Option<Instant>,
     cache: &mut Cache,
+    pathfinding: &mut Pathfinding,
 ) -> AlphaBetaResult {
     if deadline.is_some_and(|deadline| Instant::now() > deadline) {
         return AlphaBetaResult::Stopped;
@@ -319,7 +322,7 @@ fn alpha_beta(
         },
         None => search_first,
     };
-    let heuristic_board_score = heuristic_board_score(game);
+    let heuristic_board_score = heuristic_board_score(game, pathfinding);
     if depth == 0
         || heuristic_board_score == WHITE_LOSES_BLACK_WINS
         || heuristic_board_score == WHITE_WINS_BLACK_LOSES
@@ -343,9 +346,8 @@ fn alpha_beta(
                 .chain(moves_ordered_by_heuristic_quality(game))
             {
                 let child_game_state = execute_move_unchecked(game, &player_move);
-                if a_star(&child_game_state.board, player).is_none()
-                    || a_star(&child_game_state.board, player.opponent()).is_none()
-                {
+                let mut pathfinding = pathfinding.clone_with_move(&game.board, &player_move);
+                if pathfinding.any_blocked(&child_game_state.board) {
                     continue;
                 }
                 let (score, moves) = match alpha_beta(
@@ -360,6 +362,7 @@ fn alpha_beta(
                     },
                     deadline,
                     cache,
+                    &mut pathfinding,
                 ) {
                     AlphaBetaResult::Moves(moves) => moves,
                     AlphaBetaResult::Stopped => {
@@ -399,9 +402,8 @@ fn alpha_beta(
                 .chain(moves_ordered_by_heuristic_quality(game))
             {
                 let child_game_state = execute_move_unchecked(game, &player_move);
-                if a_star(&child_game_state.board, player).is_none()
-                    || a_star(&child_game_state.board, player.opponent()).is_none()
-                {
+                let mut pathfinding = pathfinding.clone_with_move(&game.board, &player_move);
+                if pathfinding.any_blocked(&child_game_state.board) {
                     continue;
                 }
                 let (score, moves) = match alpha_beta(
@@ -416,6 +418,7 @@ fn alpha_beta(
                     },
                     deadline,
                     cache,
+                    &mut pathfinding,
                 ) {
                     AlphaBetaResult::Moves(moves) => moves,
                     AlphaBetaResult::Stopped => {

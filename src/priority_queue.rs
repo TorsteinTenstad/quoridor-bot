@@ -2,6 +2,7 @@ use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashSet};
 use std::hash::Hash;
 
+#[derive(Debug, Clone)]
 pub struct PriorityQueue<K, T> {
     heap: BinaryHeap<Reverse<(K, T)>>,
     set: HashSet<T>,
@@ -38,13 +39,12 @@ impl<K: Ord + Clone, T: Ord + Hash + Clone> PriorityQueue<K, T> {
         self.set.insert(t)
     }
 
-    #[allow(dead_code)]
     pub fn contains(&self, t: &T) -> bool {
         self.set.contains(t)
     }
 
-    #[allow(dead_code)]
     pub fn remove(&mut self, t: &T) {
         self.heap.retain(|Reverse((_k, t_))| t != t_);
+        self.set.remove(t);
     }
 }

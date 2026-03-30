@@ -1,4 +1,5 @@
 pub mod a_star;
+pub mod l_p_a_star;
 pub mod a_star_to_opponent;
 pub mod all_moves;
 pub mod args;

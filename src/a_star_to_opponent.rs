@@ -57,13 +57,15 @@ fn reconstruct_path(
     total_path
 }
 
-fn neighbors(walls: &Walls, player_position: &PiecePosition) -> Vec<PiecePosition> {
+pub fn neighbors(
+    walls: &Walls,
+    player_position: &PiecePosition,
+) -> impl Iterator<Item = PiecePosition> {
     Direction::iter()
         .filter(|direction| {
             is_move_direction_legal_with_player_at_position(walls, player_position, direction)
         })
         .map(|direction| new_position_after_direction_unchecked(player_position, direction))
-        .collect()
 }
 
 #[cfg(test)]
