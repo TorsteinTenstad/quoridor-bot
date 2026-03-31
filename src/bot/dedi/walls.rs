@@ -285,7 +285,7 @@ fn board_propagate_invalid(
     }
 }
 
-fn wall_collide(walls: &Walls, orientation: WallOrientation, position: &WallPosition) -> bool {
+pub fn wall_collide(walls: &Walls, orientation: WallOrientation, position: &WallPosition) -> bool {
     let x = position.x;
     let y = position.y;
 

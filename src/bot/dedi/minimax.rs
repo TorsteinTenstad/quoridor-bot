@@ -137,11 +137,8 @@ fn _minimax(
         }
     }
 
-    let skip = depth_initial % 2 == 1 && depth <= 1;
-    if !skip {
-        for move_wall in get_wall_moves(game, &board_p1, &board_p2) {
-            moves.push(move_wall);
-        }
+    for move_wall in get_wall_moves(game, &board_p1, &board_p2) {
+        moves.push(move_wall);
     }
 
     if moves.len() == 0 {
