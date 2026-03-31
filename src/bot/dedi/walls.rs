@@ -2,7 +2,9 @@ use crate::data_model::{
     Game, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, Player, PlayerMove, WALL_GRID_HEIGHT,
     WALL_GRID_WIDTH, WallOrientation, WallPosition, Walls,
 };
-use std::{collections::VecDeque, fmt::Debug};
+use arraydeque::ArrayDeque;
+use arrayvec::ArrayVec;
+use std::fmt::Debug;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Dir {
@@ -89,7 +91,7 @@ pub fn get_board(game: &Game, player: Player) -> Board {
         tiles: [[Tile::Invalid; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
     };
 
-    let mut queue: VecDeque<(usize, usize)> = VecDeque::new();
+    let mut queue: ArrayDeque<(usize, usize), 81> = ArrayDeque::new();
 
     let y_target = match player {
         Player::Black => 0,
@@ -105,7 +107,7 @@ pub fn get_board(game: &Game, player: Player) -> Board {
     board
 }
 
-fn bfs(walls: &Walls, board: &mut Board, mut queue: VecDeque<(usize, usize)>) {
+fn bfs(walls: &Walls, board: &mut Board, mut queue: ArrayDeque<(usize, usize), 81>) {
     while let Some(xy) = queue.pop_front() {
         let from = board.tiles[xy.1][xy.0];
 
@@ -178,7 +180,7 @@ fn wall_blocks(walls: &Walls, x: isize, y: isize, dir: Dir) -> bool {
     return false;
 }
 
-pub fn _get_wall_moves(game: &Game) -> Vec<(PlayerMove, Board, Board)> {
+pub fn _get_wall_moves(game: &Game) -> ArrayVec<(PlayerMove, Board, Board), 128> {
     let p1 = game.player;
     let p2 = game.player.opponent();
 
@@ -192,8 +194,8 @@ pub fn get_wall_moves(
     game: &Game,
     board_p1: &Board,
     board_p2: &Board,
-) -> Vec<(PlayerMove, Board, Board)> {
-    let mut wall_moves: Vec<(PlayerMove, Board, Board)> = Vec::new();
+) -> ArrayVec<(PlayerMove, Board, Board), 128> {
+    let mut wall_moves: ArrayVec<(PlayerMove, Board, Board), 128> = ArrayVec::new();
 
     let p1 = game.player;
     let p2 = game.player.opponent();
@@ -242,17 +244,14 @@ pub fn get_wall_moves(
                     _ => {}
                 }
 
-                wall_moves.insert(
-                    0,
-                    (
-                        PlayerMove::PlaceWall {
-                            orientation,
-                            position,
-                        },
-                        board_p1_new,
-                        board_p2_new,
-                    ),
-                );
+                wall_moves.push((
+                    PlayerMove::PlaceWall {
+                        orientation,
+                        position,
+                    },
+                    board_p1_new,
+                    board_p2_new,
+                ));
             }
         }
     }
@@ -262,7 +261,7 @@ pub fn get_wall_moves(
 
 fn board_propagate_invalid(
     board: &mut Board,
-    collect: &mut Vec<(usize, usize)>,
+    collect: &mut ArrayVec<(usize, usize), 81>,
     x: usize,
     y: usize,
 ) {
@@ -405,7 +404,7 @@ fn board_after_wall(
             WallOrientation::Vertical => [Dir::PosX, Dir::NegX, Dir::PosX, Dir::NegX],
         });
 
-    let mut invalids: Vec<(usize, usize)> = Vec::new();
+    let mut invalids: ArrayVec<(usize, usize), 81> = ArrayVec::new();
     for ((x, y), towards_wall) in candidates {
         match board.tiles[y][x] {
             Tile::Valid(dir, _) => {
@@ -418,7 +417,7 @@ fn board_after_wall(
     }
 
     {
-        let mut queue: VecDeque<(usize, usize)> = VecDeque::new();
+        let mut queue: ArrayDeque<(usize, usize), 81> = ArrayDeque::new();
         let mut seen = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
 
         for invalid in invalids {
