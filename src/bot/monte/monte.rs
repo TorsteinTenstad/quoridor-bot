@@ -1,6 +1,3 @@
-use arrayvec::ArrayVec;
-use rand::{Rng, rngs::ThreadRng, seq::IndexedRandom};
-
 use crate::{
     bot::dedi::walls::{Dir, get_board, get_wall_moves, wall_blocks, wall_collide},
     data_model::{
@@ -9,6 +6,10 @@ use crate::{
     },
     game_logic::execute_move_unchecked_inplace,
 };
+use arrayvec::ArrayVec;
+use rand::{Rng, seq::IndexedRandom};
+use rand::{SeedableRng, rngs::SmallRng};
+use rayon::prelude::*;
 use std::{
     cmp::Reverse,
     collections::{BinaryHeap, HashMap},
@@ -29,16 +30,7 @@ pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
         })
         .collect();
 
-    let mut rng = rand::rng();
-    let mut win_count = vec![0isize; legal_moves.len()];
-    let mut iterations = 0;
-
-    while Instant::now() < deadline {
-        for (i, m) in legal_moves.iter().enumerate() {
-            win_count[i] += simulate(game, &mut rng, m.clone(), &wall_moves);
-        }
-        iterations += 1;
-    }
+    let (win_count, iterations) = run_parallel(&game, &legal_moves, &wall_moves, deadline);
 
     let best_idx = win_count
         .iter()
@@ -49,6 +41,36 @@ pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
 
     println!("{:?} / {:?}", win_count[best_idx], iterations);
     legal_moves[best_idx].clone()
+}
+
+fn run_parallel(
+    game: &Game,
+    legal_moves: &[PlayerMove],
+    wall_moves: &[PlayerMove],
+    deadline: Instant,
+) -> (Vec<isize>, usize) {
+    let mut win_count = vec![0isize; legal_moves.len()];
+    let mut iterations = 0;
+
+    while Instant::now() < deadline {
+        // Run one batch in parallel
+        let results: Vec<isize> = legal_moves
+            .par_iter()
+            .map(|m| {
+                let mut rng = SmallRng::from_os_rng();
+                simulate(&game, &mut rng, m.clone(), wall_moves)
+            })
+            .collect();
+
+        // Merge results
+        for (i, val) in results.into_iter().enumerate() {
+            win_count[i] += val;
+        }
+
+        iterations += 1;
+    }
+
+    (win_count, iterations)
 }
 
 fn wall_moves_iter() -> impl Iterator<Item = PlayerMove> {
@@ -176,7 +198,7 @@ const MAX_DEPTH: usize = 64;
 
 fn simulate(
     game: &Game,
-    rng: &mut ThreadRng,
+    rng: &mut SmallRng,
     move_initial: PlayerMove,
     wall_moves: &[PlayerMove],
 ) -> isize {
