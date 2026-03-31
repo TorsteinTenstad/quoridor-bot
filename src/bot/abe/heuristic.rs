@@ -11,9 +11,9 @@ use crate::{
 
 #[derive(Default, Debug, Clone, Copy, clap_derive::ValueEnum)]
 pub enum Heuristic {
+    #[default]
     WallsBehind,
     Forward,
-    #[default]
     Basic,
 }
 

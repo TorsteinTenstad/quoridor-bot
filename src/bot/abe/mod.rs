@@ -17,7 +17,9 @@ use crate::{
 use std::{
     collections::HashMap,
     fmt::Display,
-    path::PathBuf,
+    hash::{DefaultHasher, Hash, Hasher},
+    sync::{Arc, Mutex},
+    thread::JoinHandle,
     time::{Duration, Instant},
 };
 pub mod heuristic;
@@ -27,15 +29,55 @@ pub struct Abe {
     default_depth: Option<usize>,
     default_seconds: Option<u64>,
     default_heuristic: Heuristic,
+    game_state: Arc<Mutex<Game>>,
     cache: Cache,
+    workers: Vec<JoinHandle<()>>,
 }
 
 impl Abe {
-    pub fn load_default_params(&mut self, args: &Args) {
+    pub fn init(&mut self, args: &Args) {
         self.default_depth = args.depth;
         self.default_seconds = args.seconds;
         if let Some(heuristic) = args.heuristic {
             self.default_heuristic = heuristic;
+        }
+        *self.game_state.lock().unwrap() = Game::new();
+        for _ in 0..args.threads {
+            let game_state = Arc::clone(&self.game_state);
+            let cache = self.cache.clone();
+            let heuristic = self.default_heuristic;
+            self.workers.push(std::thread::spawn(move || {
+                worker(game_state, cache, heuristic)
+            }));
+        }
+    }
+}
+
+fn worker(game_state: Arc<Mutex<Game>>, mut cache: Cache, heuristic: Heuristic) -> () {
+    let mut currently_working_on = game_state.lock().unwrap().clone();
+    let mut depth = 0;
+    loop {
+        let mut pathfinding = Pathfinding::new(&currently_working_on.board);
+        match alpha_beta(
+            &currently_working_on,
+            depth + 1,
+            WHITE_LOSES_BLACK_WINS,
+            WHITE_WINS_BLACK_LOSES,
+            &[],
+            None,
+            heuristic,
+            &mut cache,
+            &mut pathfinding,
+        ) {
+            AlphaBetaResult::Stopped => return,
+            AlphaBetaResult::Moves(_) => {}
+        }
+        let potentially_new = game_state.lock().unwrap().clone();
+        if potentially_new != currently_working_on {
+            currently_working_on = potentially_new;
+            depth = 0;
+        } else {
+            depth += 1;
         }
     }
 }
@@ -84,14 +126,6 @@ pub enum AbeCommand {
     Heuristic {
         heuristic: Option<Heuristic>,
     },
-    ExportCache {
-        #[arg()]
-        file: PathBuf,
-    },
-    ImportCache {
-        #[arg()]
-        file: PathBuf,
-    },
     ClearCache,
 }
 
@@ -99,6 +133,7 @@ impl Bot for Abe {
     type Command = AbeCommand;
 
     fn get_move(&mut self, game: &Game) -> PlayerMove {
+        *self.game_state.lock().unwrap() = game.clone();
         let (_, eval) = get_bot_move(
             game,
             self.default_depth,
@@ -106,10 +141,13 @@ impl Bot for Abe {
             self.default_heuristic,
             &mut self.cache,
         );
-        eval.best_moves.into_iter().last().unwrap()
+        let m = eval.best_moves.into_iter().last().unwrap();
+        *self.game_state.lock().unwrap() = execute_move_unchecked(game, &m);
+        m
     }
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
+        *self.game_state.lock().unwrap() = session.game.clone();
         match cmd {
             AbeCommand::Show {
                 depth,
@@ -142,7 +180,8 @@ impl Bot for Abe {
                 print!(" depth:{}", eval.best_moves.len());
                 println!(" {:?}", duration);
                 let m = eval.best_moves.into_iter().last().unwrap();
-                session.make_move(m)
+                *self.game_state.lock().unwrap() = execute_move_unchecked(&session.game, &m);
+                session.make_move(m);
             }
             AbeCommand::Eval {
                 move_to_evaluate,
@@ -203,25 +242,6 @@ impl Bot for Abe {
                 );
                 println!("{:?}:{}", heuristic, val);
             }
-            AbeCommand::ExportCache { file: path } => match std::fs::File::create(path) {
-                Ok(file) => {
-                    serde_json::ser::to_writer_pretty(file, &self.cache).unwrap();
-                }
-                Err(e) => {
-                    println!("{:?}", e)
-                }
-            },
-            AbeCommand::ImportCache { file: path } => match std::fs::File::open(path) {
-                Ok(file) => match serde_json::de::from_reader::<_, Cache>(file) {
-                    Ok(cache) => self.cache = cache,
-                    Err(e) => {
-                        println!("{:?}", e)
-                    }
-                },
-                Err(e) => {
-                    println!("{:?}", e)
-                }
-            },
             AbeCommand::ClearCache => self.cache = Cache::default(),
         }
     }
@@ -309,10 +329,15 @@ impl Display for BoardEvaluation {
     }
 }
 
-#[derive(Default, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Clone)]
 pub struct Cache {
-    #[serde(with = "serde_json_any_key::any_key_map")]
-    transposition_table: HashMap<Game, BoardEvaluation>,
+    transposition_table: Arc<Mutex<HashMap<u64, BoardEvaluation>>>,
+}
+
+fn hash_to_u64(value: &impl Hash) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
 }
 enum AlphaBetaResult {
     Moves(BoardEvaluation),
@@ -334,7 +359,8 @@ fn alpha_beta(
     if deadline.is_some_and(|deadline| Instant::now() > deadline) {
         return AlphaBetaResult::Stopped;
     }
-    let search_first = match cache.transposition_table.get(game) {
+    let game_hash = hash_to_u64(game);
+    let search_first = match cache.transposition_table.lock().unwrap().get(&game_hash) {
         Some(eval) => {
             if eval.best_moves.len() >= depth {
                 return AlphaBetaResult::Moves(eval.clone());
@@ -412,13 +438,14 @@ fn alpha_beta(
                 score: value,
                 best_moves,
             };
-            if depth > 1
-                && cache
-                    .transposition_table
-                    .get(game)
+            if depth > 1 {
+                let game_hash = hash_to_u64(game);
+                let mut t = cache.transposition_table.lock().unwrap();
+                if t.get(&game_hash)
                     .is_none_or(|eval| eval.best_moves.len() < depth)
-            {
-                cache.transposition_table.insert(game.clone(), eval.clone());
+                {
+                    t.insert(game_hash, eval.clone());
+                }
             }
             AlphaBetaResult::Moves(eval)
         }
@@ -469,13 +496,14 @@ fn alpha_beta(
                 score: value,
                 best_moves,
             };
-            if depth > 1
-                && cache
-                    .transposition_table
-                    .get(game)
+            if depth > 1 {
+                let game_hash = hash_to_u64(game);
+                let mut t = cache.transposition_table.lock().unwrap();
+                if t.get(&game_hash)
                     .is_none_or(|eval| eval.best_moves.len() < depth)
-            {
-                cache.transposition_table.insert(game.clone(), eval.clone());
+                {
+                    t.insert(game_hash, eval.clone());
+                }
             }
             AlphaBetaResult::Moves(eval)
         }
