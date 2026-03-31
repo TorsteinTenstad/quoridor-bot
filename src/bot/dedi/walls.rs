@@ -117,7 +117,7 @@ pub fn get_board(game: &Game, player: Player) -> Board {
     };
     for x in 0..PIECE_GRID_WIDTH {
         board.tiles[y_target][x] = Tile::Valid(Dir::None, 0);
-        queue.push_back((x, y_target));
+        let _ = queue.push_back((x, y_target));
     }
 
     bfs(&game.board.walls, &mut board, queue);
@@ -155,7 +155,7 @@ fn bfs(walls: &Walls, board: &mut Board, mut queue: ArrayDeque<(usize, usize), 8
             }
 
             board.tiles[y][x] = Tile::Valid(dir.reverse(), distance);
-            queue.push_back((x, y));
+            let _ = queue.push_back((x, y));
         }
     }
 }
@@ -460,7 +460,7 @@ fn board_after_wall(
 
                 match board.tiles[y][x] {
                     Tile::Valid(_, _) => {
-                        queue.push_back((x, y));
+                        let _ = queue.push_back((x, y));
                     }
                     _ => {}
                 };
