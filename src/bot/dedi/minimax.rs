@@ -1,6 +1,9 @@
 use crate::{
     bot::dedi::walls::{Board, Tile, get_board, get_wall_moves},
-    data_model::{Game, PIECE_GRID_HEIGHT, Player, PlayerMove},
+    data_model::{
+        Game, PIECE_GRID_HEIGHT, Player, PlayerMove, WALL_GRID_HEIGHT, WALL_GRID_WIDTH,
+        WallOrientation,
+    },
     game_logic::{
         all_move_piece_moves, execute_move_unchecked, is_move_piece_legal_with_players_at_positions,
     },
@@ -20,7 +23,7 @@ pub fn minimax_iterative(game: &Game, duration: Duration, cache: &mut Cache) -> 
     let mut best_move: Option<PlayerMove> = None;
     loop {
         if let Some((_move, h)) = minimax(game, depth, deadline, cache) {
-            println!("Found {:?} at level {:?} with h={:?}", _move, depth, h);
+            println!("Depth {:?}: found {:?} with h={:?}", depth, _move, h);
             best_move = _move;
             depth += 1;
             if h == INF || h == -INF {
@@ -181,7 +184,10 @@ fn _minimax(
 }
 
 fn heuristic(game: &Game, b1: &Board, b2: &Board) -> isize {
-    _heuristic(game, game.player, b1) - _heuristic(game, game.player.opponent(), b2)
+    let walls = game.walls_left[game.player.as_index()];
+    let coeff = if walls > 0 { 1 } else { 1 };
+
+    coeff * _heuristic(game, game.player, b1) - _heuristic(game, game.player.opponent(), b2)
 }
 
 fn _heuristic(game: &Game, player: Player, board: &Board) -> isize {
@@ -190,7 +196,9 @@ fn _heuristic(game: &Game, player: Player, board: &Board) -> isize {
 
     let dis = match tile {
         Tile::Invalid => {
-            unreachable!()
+            println!("\n!!!\nERROR(_heuristic:196)\n!!!\n");
+            println!("{:?}", board);
+            return 0;
         }
         Tile::Valid(_, dis) => dis,
     };
@@ -200,8 +208,43 @@ fn _heuristic(game: &Game, player: Player, board: &Board) -> isize {
 
     let mut h: isize = 0;
 
-    h -= (dis as isize) * 10;
-    h += game.walls_left[player.as_index()] as isize;
+    h -= dis as isize * 50;
+    h += game.walls_left[player.as_index()] as isize * 2;
+
+    fn ahead_black(y: usize, pos_y: usize) -> bool {
+        y < pos_y
+    }
+    fn ahead_white(y: usize, pos_y: usize) -> bool {
+        y >= pos_y
+    }
+    let y_ahead = match player {
+        Player::Black => ahead_black,
+        Player::White => ahead_white,
+    };
+
+    for y in 0..WALL_GRID_HEIGHT {
+        for x in 0..WALL_GRID_WIDTH {
+            match game.board.walls.0[x][y] {
+                None => {}
+                Some(WallOrientation::Horizontal) => {
+                    let dx = x as isize - pos.x as isize;
+                    if y_ahead(y, pos.y) {
+                        h += if dx.abs() <= 1 { -3 } else { -2 }
+                    } else {
+                        h += if dx.abs() <= 1 { 2 } else { 1 }
+                    }
+                }
+                Some(WallOrientation::Vertical) => {
+                    let dx = x as isize - pos.x as isize;
+                    if y_ahead(y, pos.y) {
+                        h += if dx.abs() <= 1 { 0 } else { -1 }
+                    } else {
+                        h += if dx.abs() <= 1 { 0 } else { 0 }
+                    }
+                }
+            }
+        }
+    }
 
     h
 }
