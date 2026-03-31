@@ -35,7 +35,11 @@ impl Bot for Dedi {
             .default_seconds
             .map(Duration::from_secs)
             .unwrap_or(Duration::from_secs(3));
-        minimax::minimax_iterative(game, duration, &mut self.cache).unwrap()
+
+        minimax::minimax_iterative(game, duration, &mut self.cache)
+            .last()
+            .unwrap()
+            .clone()
     }
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
