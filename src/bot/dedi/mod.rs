@@ -21,7 +21,7 @@ pub struct Dedi {
 }
 
 impl Dedi {
-    pub fn load_default_params(&mut self, args: &args::Args) {
+    pub fn init(&mut self, args: &args::Args) {
         self.default_depth = args.depth;
         self.default_seconds = args.seconds;
     }

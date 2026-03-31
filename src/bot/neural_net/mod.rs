@@ -4,7 +4,7 @@ pub struct NeuralNet {
 }
 
 impl NeuralNet {
-    pub fn load_default_params(&mut self, args: &Args) {
+    pub fn init(&mut self, args: &Args) {
         self.default_temperature = args.temperature;
     }
 }

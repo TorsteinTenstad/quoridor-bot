@@ -70,9 +70,9 @@ impl Bots {
         }
     }
 
-    pub fn load_default_params(&mut self, args: &Args) {
-        self.abe.load_default_params(args);
-        self.neural_net.load_default_params(args);
-        self.dedi.load_default_params(args);
+    pub fn init(&mut self, args: &Args) {
+        self.abe.init(args);
+        self.neural_net.init(args);
+        self.dedi.init(args);
     }
 }
