@@ -172,7 +172,7 @@ fn get_legal_wall_moves(game: &Game) -> impl Iterator<Item = PlayerMove> {
         .map(|m| m.0)
 }
 
-const MAX_DEPTH: usize = 128;
+const MAX_DEPTH: usize = 64;
 
 fn simulate(
     game: &Game,
@@ -201,8 +201,9 @@ fn simulate(
         if wall_moves.len() == 0 {
             break;
         }
+        let no_walls_left = game.walls_left[game.player.as_index()] == 0;
 
-        let m = if rng.random_bool(0.5) {
+        let m = if no_walls_left || rng.random_bool(0.8) {
             let piece_moves = get_legal_piece_moves(&game, game.player);
             if piece_moves.len() == 0 {
                 return 0;
