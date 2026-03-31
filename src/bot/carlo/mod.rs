@@ -1,20 +1,18 @@
+mod bfs;
 mod board;
-mod path;
-
-use rand::{rngs::ThreadRng, seq::IteratorRandom};
+mod mcts;
+mod node;
 
 use crate::{
-    all_moves::ALL_MOVES,
     bot::Bot,
     commands::parse_player_move,
     data_model::{Game, PlayerMove},
-    game_logic::is_move_legal,
     session::Session,
 };
 
 #[derive(Default)]
 pub struct Carlo {
-    rng: ThreadRng,
+    mcst: mcts::Mcts,
 }
 
 #[derive(clap_derive::Subcommand, Debug)]
@@ -28,12 +26,7 @@ impl Bot for Carlo {
     type Command = CarloCommand;
 
     fn get_move(&mut self, game: &Game) -> PlayerMove {
-        ALL_MOVES
-            .iter()
-            .filter(|m| is_move_legal(game, m))
-            .choose(&mut self.rng)
-            .expect("at least one move will always be valid")
-            .clone()
+        self.mcst.get_move(game)
     }
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
@@ -43,16 +36,16 @@ impl Bot for Carlo {
                 println!("{:?}", board::Board::from(&session.game))
             }
             CarloCommand::PlaceWall { m } => {
-                if let Some(PlayerMove::PlaceWall {
-                    orientation,
-                    position,
-                }) = parse_player_move(&m)
-                {
-                    let mut board = board::Board::from(&session.game);
-                    println!("{:?}", board);
-                    board.recalculate_bfs(position.x, position.y, orientation);
-                    println!("{:?}", board)
-                }
+                // if let Some(PlayerMove::PlaceWall {
+                //     orientation,
+                //     position,
+                // }) = parse_player_move(&m)
+                // {
+                //     let mut board = board::Board::from(&session.game);
+                //     println!("{:?}", board);
+                //     board.recalculate_bfs(position.x, position.y, orientation);
+                //     println!("{:?}", board)
+                // }
             }
         }
     }
