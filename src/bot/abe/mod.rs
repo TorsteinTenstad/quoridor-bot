@@ -41,19 +41,23 @@ impl Abe {
         if let Some(heuristic) = args.heuristic {
             self.default_heuristic = heuristic;
         }
-        *self.game_state.lock().unwrap() = Game::new();
-        for _ in 0..args.threads {
+        self.update_game_state(Game::new());
+        for i in 0..args.threads {
             let game_state = Arc::clone(&self.game_state);
             let cache = self.cache.clone();
             let heuristic = self.default_heuristic;
             self.workers.push(std::thread::spawn(move || {
-                worker(game_state, cache, heuristic)
+                worker(i, game_state, cache, heuristic)
             }));
         }
     }
+    pub fn update_game_state(&mut self, game: Game) {
+        // println!("Updating game state ({:?})", Instant::now());
+        *self.game_state.lock().unwrap() = game;
+    }
 }
 
-fn worker(game_state: Arc<Mutex<Game>>, mut cache: Cache, heuristic: Heuristic) -> () {
+fn worker(i: usize, game_state: Arc<Mutex<Game>>, mut cache: Cache, heuristic: Heuristic) -> () {
     let mut currently_working_on = game_state.lock().unwrap().clone();
     let mut depth = 0;
     loop {
@@ -75,6 +79,11 @@ fn worker(game_state: Arc<Mutex<Game>>, mut cache: Cache, heuristic: Heuristic) 
         let potentially_new = game_state.lock().unwrap().clone();
         if potentially_new != currently_working_on {
             currently_working_on = potentially_new;
+            // println!(
+            //     "Worker {i} got new game state after finishing depth {} ({:?})",
+            //     depth + 1,
+            //     Instant::now()
+            // );
             depth = 0;
         } else {
             depth += 1;
@@ -133,7 +142,7 @@ impl Bot for Abe {
     type Command = AbeCommand;
 
     fn get_move(&mut self, game: &Game) -> PlayerMove {
-        *self.game_state.lock().unwrap() = game.clone();
+        self.update_game_state(game.clone());
         let (_, eval) = get_bot_move(
             game,
             self.default_depth,
@@ -142,12 +151,12 @@ impl Bot for Abe {
             &mut self.cache,
         );
         let m = eval.best_moves.into_iter().last().unwrap();
-        *self.game_state.lock().unwrap() = execute_move_unchecked(game, &m);
+        self.update_game_state(execute_move_unchecked(game, &m));
         m
     }
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
-        *self.game_state.lock().unwrap() = session.game.clone();
+        self.update_game_state(session.game.clone());
         match cmd {
             AbeCommand::Show {
                 depth,
@@ -180,7 +189,7 @@ impl Bot for Abe {
                 print!(" depth:{}", eval.best_moves.len());
                 println!(" {:?}", duration);
                 let m = eval.best_moves.into_iter().last().unwrap();
-                *self.game_state.lock().unwrap() = execute_move_unchecked(&session.game, &m);
+                self.update_game_state(execute_move_unchecked(&session.game, &m));
                 session.make_move(m);
             }
             AbeCommand::Eval {
