@@ -39,17 +39,17 @@ pub fn minimax_iterative(game: &Game, duration: Duration, cache: &mut Cache) -> 
 
 #[derive(Default)]
 pub struct Cache {
-    table: HashMap<u64, CacheLine>,
+    pub table: HashMap<u64, CacheLine>,
 }
 
 #[derive(Clone)]
 pub struct CacheLine {
-    depth: usize,
-    play: Option<PlayerMove>,
-    h: isize,
+    pub depth: usize,
+    pub play: Option<PlayerMove>,
+    pub h: isize,
 }
 
-fn hash_to_u64<T: Hash>(value: &T) -> u64 {
+pub fn hash_to_u64<T: Hash>(value: &T) -> u64 {
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);
     hasher.finish()
@@ -136,10 +136,31 @@ fn _minimax(
         }
     }
 
+    let mut alpha = alpha;
+    let mut h_best = -INF;
+    let mut move_best: Option<PlayerMove> = None;
+
     let skip = depth_initial % 2 == 1 && depth <= 1;
     if !skip {
-        for move_wall in get_wall_moves(game, &board_p1, &board_p2) {
-            moves.push(move_wall);
+        for (move_wall, boards_or_cached) in
+            get_wall_moves(game, &board_p1, &board_p2, depth, cache)
+        {
+            match boards_or_cached {
+                super::walls::BoardsOrCached::Boards(b1, b2) => {
+                    moves.push((move_wall, b1, b2));
+                }
+                super::walls::BoardsOrCached::Cached(cache_line) => {
+                    if cache_line.depth >= depth {
+                        let h_inv = -cache_line.h;
+
+                        if h_inv > h_best || move_best == None {
+                            h_best = h_inv;
+                            move_best = Some(move_wall);
+                        }
+                        alpha = alpha.max(h_best);
+                    }
+                }
+            }
         }
     }
 
@@ -147,12 +168,9 @@ fn _minimax(
         return Some((None, -INF));
     }
 
-    let mut alpha = alpha;
-    let mut h_best = -INF;
-    let mut move_best: Option<PlayerMove> = None;
-
     for (_move, b1, b2) in moves {
         let game_next = execute_move_unchecked(game, &_move);
+
         if let Some((_, h_next)) = _minimax(
             &game_next,
             depth - 1,
@@ -170,7 +188,7 @@ fn _minimax(
                 h_best = h_inv;
                 move_best = Some(_move);
             }
-            alpha = isize::max(alpha, h_best);
+            alpha = alpha.max(h_best);
             if alpha >= beta {
                 break;
             }
@@ -215,8 +233,10 @@ fn _heuristic(game: &Game, player: Player, board: &Board) -> isize {
 
     let mut h: isize = 0;
 
-    h -= dis as isize * 50;
-    h += game.walls_left[player.as_index()] as isize * 2;
+    h += (10.0 - dis as f64).max(0.0).sqrt().sqrt() as isize;
+    h -= dis as isize * 10;
+
+    h += game.walls_left[player.as_index()] as isize * 20;
 
     fn ahead_black(y: usize, pos_y: usize) -> bool {
         y < pos_y

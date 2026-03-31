@@ -5,10 +5,7 @@ use std::time::Duration;
 
 use crate::{
     args,
-    bot::{
-        Bot,
-        dedi::{minimax::Cache, walls::get_move},
-    },
+    bot::{Bot, dedi::minimax::Cache},
     data_model::{Game, PlayerMove},
     session::Session,
 };
@@ -40,7 +37,7 @@ impl Bot for Dedi {
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
         match cmd {
-            DediCommand::Walls => get_move(&session.game),
+            DediCommand::Walls => {}
         }
     }
 }

@@ -1,6 +1,9 @@
-use crate::data_model::{
-    Game, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, Player, PlayerMove, WALL_GRID_HEIGHT,
-    WALL_GRID_WIDTH, WallOrientation, WallPosition, Walls,
+use crate::{
+    bot::dedi::minimax::{Cache, CacheLine, hash_to_u64},
+    data_model::{
+        Game, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, Player, PlayerMove, WALL_GRID_HEIGHT,
+        WALL_GRID_WIDTH, WallOrientation, WallPosition, Walls,
+    },
 };
 use std::{collections::VecDeque, fmt::Debug};
 
@@ -77,11 +80,6 @@ impl Debug for Board {
         }
         Ok(())
     }
-}
-
-pub fn get_move(game: &Game) {
-    let wall_moves = _get_wall_moves(game);
-    println!("count: {:?}", wall_moves.len());
 }
 
 pub fn get_board(game: &Game, player: Player) -> Board {
@@ -178,22 +176,19 @@ fn wall_blocks(walls: &Walls, x: isize, y: isize, dir: Dir) -> bool {
     return false;
 }
 
-pub fn _get_wall_moves(game: &Game) -> Vec<(PlayerMove, Board, Board)> {
-    let p1 = game.player;
-    let p2 = game.player.opponent();
-
-    let board_p1 = get_board(&game, p1);
-    let board_p2 = get_board(&game, p2);
-
-    get_wall_moves(game, &board_p1, &board_p2)
+pub enum BoardsOrCached {
+    Boards(Board, Board),
+    Cached(CacheLine),
 }
 
 pub fn get_wall_moves(
     game: &Game,
     board_p1: &Board,
     board_p2: &Board,
-) -> Vec<(PlayerMove, Board, Board)> {
-    let mut wall_moves: Vec<(PlayerMove, Board, Board)> = Vec::new();
+    depth: usize,
+    cache: &Cache,
+) -> Vec<(PlayerMove, BoardsOrCached)> {
+    let mut wall_moves: Vec<(PlayerMove, BoardsOrCached)> = Vec::new();
 
     let p1 = game.player;
     let p2 = game.player.opponent();
@@ -220,9 +215,35 @@ pub fn get_wall_moves(
                             orientation,
                             position,
                         },
-                        board_p1.clone(),
-                        board_p2.clone(),
+                        BoardsOrCached::Boards(board_p1.clone(), board_p2.clone()),
                     ));
+                    continue;
+                }
+
+                let player_move = PlayerMove::PlaceWall {
+                    orientation,
+                    position,
+                };
+
+                let mut hit = false;
+                game.board.walls.0[x][y] = Some(orientation);
+                game.walls_left[game.player.as_index()] -= 1;
+                game.player = game.player.opponent();
+
+                let hash = hash_to_u64(&game);
+                if cache.table.contains_key(&hash) {
+                    let line = cache.table[&hash].clone();
+                    if line.depth >= depth {
+                        wall_moves
+                            .push((player_move.clone(), BoardsOrCached::Cached(line.clone())));
+                        hit = true;
+                    }
+                }
+
+                game.board.walls.0[x][y] = None;
+                game.walls_left[game.player.as_index()] += 1;
+                game.player = game.player.opponent();
+                if hit {
                     continue;
                 }
 
@@ -245,12 +266,8 @@ pub fn get_wall_moves(
                 wall_moves.insert(
                     0,
                     (
-                        PlayerMove::PlaceWall {
-                            orientation,
-                            position,
-                        },
-                        board_p1_new,
-                        board_p2_new,
+                        player_move,
+                        BoardsOrCached::Boards(board_p1_new, board_p2_new),
                     ),
                 );
             }
@@ -395,8 +412,9 @@ fn board_after_wall(
     y: usize,
     orientation: WallOrientation,
 ) -> Board {
-    let mut board = board.clone();
     game.board.walls.0[x][y] = Some(orientation);
+
+    let mut board = board.clone();
 
     let candidates = [(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)]
         .into_iter()
