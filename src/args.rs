@@ -1,4 +1,5 @@
 use crate::bot::BotType;
+use std::time::Duration;
 
 #[derive(clap_derive::Parser, Debug)]
 pub struct Args {
@@ -26,3 +27,5 @@ pub struct Args {
     #[clap(long, default_value_t = 1000)]
     pub window_size: usize,
 }
+
+pub const DEFAULT_DURATION: Duration = Duration::from_secs(5);

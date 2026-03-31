@@ -24,7 +24,7 @@ pub fn minimax_iterative(game: &Game, duration: Duration, cache: &mut Cache) -> 
     let mut best_move: Option<PlayerMove> = None;
     loop {
         if let Some((_move, h)) = minimax(game, depth, deadline, cache) {
-            println!("Depth {:?}: found {:?} with h={:?}", depth, _move, h);
+            // println!("Depth {:?}: found {:?} with h={:?}", depth, _move, h);
             best_move = _move;
             depth += 1;
             if h == INF || h == -INF {

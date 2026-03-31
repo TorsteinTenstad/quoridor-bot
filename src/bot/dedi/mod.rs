@@ -4,7 +4,7 @@ pub mod walls;
 use std::time::Duration;
 
 use crate::{
-    args,
+    args::{self, DEFAULT_DURATION},
     bot::{
         Bot,
         dedi::{minimax::Cache, walls::get_move},
@@ -34,7 +34,7 @@ impl Bot for Dedi {
         let duration = self
             .default_seconds
             .map(Duration::from_secs)
-            .unwrap_or(Duration::from_secs(3));
+            .unwrap_or(DEFAULT_DURATION);
         minimax::minimax_iterative(game, duration, &mut self.cache).unwrap()
     }
 

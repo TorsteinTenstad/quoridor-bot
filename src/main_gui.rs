@@ -13,7 +13,12 @@ use lib::{
 };
 use std::{
     fmt::{Debug, Display},
-    sync::mpsc::{Receiver, channel},
+    process::exit,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc::{Receiver, channel},
+    },
 };
 
 pub enum InputType {
@@ -56,16 +61,31 @@ fn main() {
         current_state: Game::new(),
     };
 
+    let ctrl_c = Arc::new(AtomicBool::new(false));
+
+    let c = ctrl_c.clone();
+    ctrlc::set_handler(move || {
+        if c.swap(true, Ordering::Relaxed) {
+            exit(0);
+        }
+    })
+    .unwrap();
+
     std::thread::spawn(move || {
-        let input_type_white = InputType::from(args.player_white);
-        let input_type_black = InputType::from(args.player_black);
+        let mut input_type_white = InputType::from(args.player_white);
+        let mut input_type_black = InputType::from(args.player_black);
         let mut bots_white = Bots::default();
         let mut bots_black = Bots::default();
         bots_white.init(&args);
         bots_black.init(&args);
 
-        let mut session = Session::default();
+        let mut session: Session = Session::default();
         loop {
+            if ctrl_c.load(Ordering::Relaxed) {
+                println!("Aborting all automatic play. Ctrl+C again to abort");
+                input_type_white = InputType::Manual;
+                input_type_black = InputType::Manual;
+            }
             let player = session.game.player;
             let (input_type, bots) = match player {
                 Player::White => (&input_type_white, &mut bots_white),
