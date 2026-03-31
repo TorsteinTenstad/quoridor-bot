@@ -1,5 +1,5 @@
 use crate::data_model::{
-    Game, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, Player, PlayerMove, WALL_GRID_HEIGHT,
+    Direction, Game, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, Player, PlayerMove, WALL_GRID_HEIGHT,
     WALL_GRID_WIDTH, WallOrientation, WallPosition, Walls,
 };
 use arraydeque::ArrayDeque;
@@ -16,7 +16,7 @@ pub enum Dir {
 }
 
 impl Dir {
-    fn reverse(&self) -> Dir {
+    pub fn reverse(&self) -> Dir {
         match self {
             Dir::PosX => Dir::NegX,
             Dir::PosY => Dir::NegY,
@@ -25,7 +25,7 @@ impl Dir {
             Dir::None => Dir::None,
         }
     }
-    fn apply(&self, (x, y): (usize, usize)) -> (usize, usize) {
+    pub fn apply(&self, (x, y): (usize, usize)) -> (usize, usize) {
         match self {
             Dir::PosX => (x + 1, y),
             Dir::PosY => (x, y + 1),
@@ -34,13 +34,31 @@ impl Dir {
             Dir::None => (x, y),
         }
     }
-    fn can_apply(&self, (x, y): (usize, usize)) -> bool {
+    pub fn can_apply(&self, (x, y): (usize, usize)) -> bool {
         match self {
             Dir::PosX => x < PIECE_GRID_WIDTH - 1,
             Dir::PosY => y < PIECE_GRID_HEIGHT - 1,
             Dir::NegX => x > 0,
             Dir::NegY => y > 0,
             Dir::None => false,
+        }
+    }
+    pub fn orthogonal(&self) -> (Dir, Dir) {
+        match self {
+            Dir::PosX => (Dir::NegY, Dir::PosY),
+            Dir::PosY => (Dir::NegX, Dir::PosX),
+            Dir::NegX => (Dir::PosY, Dir::NegY),
+            Dir::NegY => (Dir::PosX, Dir::NegX),
+            Dir::None => unreachable!(),
+        }
+    }
+    pub fn to_direction(&self) -> Direction {
+        match self {
+            Dir::PosX => Direction::Right,
+            Dir::PosY => Direction::Down,
+            Dir::NegX => Direction::Left,
+            Dir::NegY => Direction::Up,
+            Dir::None => unreachable!(),
         }
     }
 }
@@ -142,7 +160,7 @@ fn bfs(walls: &Walls, board: &mut Board, mut queue: ArrayDeque<(usize, usize), 8
     }
 }
 
-fn wall_blocks(walls: &Walls, x: isize, y: isize, dir: Dir) -> bool {
+pub fn wall_blocks(walls: &Walls, x: isize, y: isize, dir: Dir) -> bool {
     let checks = match dir {
         Dir::PosX => [
             (x, y, WallOrientation::Vertical),

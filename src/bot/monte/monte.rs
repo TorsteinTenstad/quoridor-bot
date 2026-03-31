@@ -2,15 +2,12 @@ use arrayvec::ArrayVec;
 use rand::{Rng, rngs::ThreadRng, seq::IndexedRandom};
 
 use crate::{
-    bot::dedi::walls::{get_board, get_wall_moves, wall_collide},
+    bot::dedi::walls::{Dir, get_board, get_wall_moves, wall_blocks, wall_collide},
     data_model::{
-        Game, PIECE_GRID_HEIGHT, Player, PlayerMove, WALL_GRID_HEIGHT, WALL_GRID_WIDTH,
+        Game, MovePiece, PIECE_GRID_HEIGHT, Player, PlayerMove, WALL_GRID_HEIGHT, WALL_GRID_WIDTH,
         WallOrientation, WallPosition,
     },
-    game_logic::{
-        all_move_piece_moves, execute_move_unchecked_inplace,
-        is_move_piece_legal_with_players_at_positions,
-    },
+    game_logic::execute_move_unchecked_inplace,
 };
 use std::time::{Duration, Instant};
 
@@ -64,20 +61,55 @@ fn wall_moves_iter() -> impl Iterator<Item = PlayerMove> {
 }
 
 fn get_legal_moves(game: &Game) -> impl Iterator<Item = PlayerMove> {
-    get_legal_piece_moves(game).chain(get_legal_wall_moves(game))
+    get_legal_piece_moves(game)
+        .into_iter()
+        .chain(get_legal_wall_moves(game))
 }
 
-fn get_legal_piece_moves(game: &Game) -> impl Iterator<Item = PlayerMove> {
-    let p1 = game.player;
-    let p2 = game.player.opponent();
-    let pos_p1 = game.board.player_position(p1);
-    let pos_p2 = game.board.player_position(p2);
+fn get_legal_piece_moves(game: &Game) -> ArrayVec<PlayerMove, 8> {
+    let p1 = game.board.player_position(game.player);
+    let p1 = (p1.x, p1.y);
+    let p2 = game.board.player_position(game.player.opponent());
+    let p2 = (p2.x, p2.y);
+    let mut moves: ArrayVec<PlayerMove, 8> = ArrayVec::new();
 
-    all_move_piece_moves(pos_p1, pos_p2)
-        .filter(|m| {
-            is_move_piece_legal_with_players_at_positions(&game.board.walls, pos_p1, pos_p2, &m)
-        })
-        .map(|m| PlayerMove::MovePiece(m))
+    let allow = |xy: (usize, usize), dir: Dir| {
+        dir.can_apply(xy) && !wall_blocks(&game.board.walls, xy.0 as isize, xy.1 as isize, dir)
+    };
+
+    for dir in [Dir::PosX, Dir::PosY, Dir::NegX, Dir::NegY] {
+        if !allow(p1, dir) {
+            continue;
+        }
+        let (x, y) = dir.apply(p1);
+        let direction = dir.to_direction();
+
+        if x == p2.0 && y == p2.1 {
+            if allow(p2, dir) {
+                moves.push(PlayerMove::MovePiece(MovePiece {
+                    direction: direction,
+                    direction_on_collision: direction,
+                }));
+            } else {
+                let (left, right) = dir.orthogonal();
+                for _dir in [left, right] {
+                    if allow(p2, _dir) {
+                        moves.push(PlayerMove::MovePiece(MovePiece {
+                            direction: direction,
+                            direction_on_collision: _dir.to_direction(),
+                        }));
+                    }
+                }
+            }
+        } else {
+            moves.push(PlayerMove::MovePiece(MovePiece {
+                direction: direction,
+                direction_on_collision: direction,
+            }));
+        }
+    }
+
+    moves
 }
 
 fn get_legal_wall_moves(game: &Game) -> impl Iterator<Item = PlayerMove> {
@@ -117,7 +149,7 @@ fn simulate(
             return -1;
         }
 
-        let piece_moves: ArrayVec<_, 8> = get_legal_piece_moves(&game).collect();
+        let piece_moves = get_legal_piece_moves(&game);
         let m = if piece_moves.len() > 0 && rng.random_bool(0.8) {
             piece_moves.choose(rng).unwrap().clone()
         } else if wall_moves.len() == 0 {
