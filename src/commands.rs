@@ -30,11 +30,8 @@ pub enum AuxCommand {
         file: Option<PathBuf>,
     },
     Import {
-        #[arg(group = "source", default_value_t = String::default())]
-        moves_string: String,
-
-        #[arg(short, long, group = "source")]
-        file: Option<PathBuf>,
+        #[arg( default_value_t = String::default())]
+        file_or_moves_string: String,
     },
 }
 const AUX_COMMAND_NAME: &str = "";
@@ -78,16 +75,19 @@ pub fn execute_command(bots: &mut Bots, session: &mut Session, command: Command)
                     },
                 }
             }
-            AuxCommand::Import { moves_string, file } => {
-                let moves_string = match file {
-                    None => moves_string,
-                    Some(path) => match std::fs::read(path) {
+            AuxCommand::Import {
+                file_or_moves_string,
+            } => {
+                let moves_string = if file_or_moves_string.contains(';') {
+                    file_or_moves_string
+                } else {
+                    match std::fs::read(file_or_moves_string) {
                         Ok(vec) => String::from_utf8_lossy(&vec).into(),
                         Err(e) => {
                             println!("{:?}", e);
                             return;
                         }
-                    },
+                    }
                 };
                 if let Some(moves) = moves_string
                     .trim_matches(';')

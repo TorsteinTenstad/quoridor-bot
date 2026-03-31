@@ -7,8 +7,8 @@ use crate::{
         WallOrientation, WallPosition,
     },
     game_logic::{
-        all_move_piece_moves, execute_move_unchecked, is_move_legal, is_move_piece_legal,
-        room_for_wall_placement,
+        all_move_piece_moves, execute_move_unchecked, execute_move_unchecked_inplace,
+        is_move_legal, is_move_piece_legal, room_for_wall_placement,
     },
     l_p_a_star::Pathfinding,
     session::Session,
@@ -74,6 +74,12 @@ pub enum AbeCommand {
 
         #[arg(short, long)]
         heuristic: Option<Heuristic>,
+
+        #[arg(short, long)]
+        verbose: bool,
+
+        #[arg(short = 'o', long)]
+        show_outcome: bool,
     },
     Heuristic {
         heuristic: Option<Heuristic>,
@@ -86,6 +92,7 @@ pub enum AbeCommand {
         #[arg()]
         file: PathBuf,
     },
+    ClearCache,
 }
 
 impl Bot for Abe {
@@ -142,34 +149,49 @@ impl Bot for Abe {
                 depth,
                 seconds,
                 heuristic,
+                verbose,
+                show_outcome,
             } => {
-                if let Some(move_str) = move_to_evaluate {
-                    if let Some(m) = parse_player_move(&move_str) {
-                        if is_move_legal(&session.game, &m) {
-                            let next_game_state = execute_move_unchecked(&session.game, &m);
-                            let (duration, eval) = get_bot_move(
-                                &next_game_state,
-                                depth,
-                                seconds.map(Duration::from_secs),
-                                heuristic.unwrap_or(self.default_heuristic),
-                                &mut self.cache,
-                            );
-                            println!("{} {:?}", eval.score, duration);
-                        } else {
-                            println!("Invalid move");
+                let initial = match move_to_evaluate {
+                    Some(move_str) => match parse_player_move(&move_str) {
+                        Some(m) if is_move_legal(&session.game, &m) => Some(m),
+                        Some(_) => {
+                            println!("Illegal move");
+                            return;
                         }
-                    } else {
-                        println!("Could not parse move: {}", move_str);
+                        None => {
+                            println!("Could not parse move: {}", move_str);
+                            return;
+                        }
+                    },
+                    None => None,
+                };
+                let mut game = session.game.clone();
+                if let Some(m) = &initial {
+                    execute_move_unchecked_inplace(&mut game, m)
+                }
+                let (duration, eval) = get_bot_move(
+                    &game,
+                    depth,
+                    seconds.map(Duration::from_secs),
+                    heuristic.unwrap_or(self.default_heuristic),
+                    &mut self.cache,
+                );
+                let move_name = initial
+                    .as_ref()
+                    .map(PlayerMove::to_string)
+                    .unwrap_or("Best move".into());
+                println!("{} evaluates to {}", move_name, eval.score);
+                if verbose {
+                    println!("{eval} {:?}", duration);
+                }
+                if show_outcome {
+                    let n = eval.best_moves.len() + initial.is_some() as usize;
+                    let moves = initial.into_iter().chain(eval.best_moves.into_iter().rev());
+                    for m in moves {
+                        session.make_move(m);
                     }
-                } else {
-                    let (_, eval) = get_bot_move(
-                        &session.game,
-                        depth,
-                        seconds.map(Duration::from_secs),
-                        heuristic.unwrap_or(self.default_heuristic),
-                        &mut self.cache,
-                    );
-                    println!("Best move evaluates to {}", eval.score);
+                    println!("Showing outcome. Use `undo {n}` to revert")
                 }
             }
             AbeCommand::Heuristic { heuristic } => {
@@ -200,6 +222,7 @@ impl Bot for Abe {
                     println!("{:?}", e)
                 }
             },
+            AbeCommand::ClearCache => self.cache = Cache::default(),
         }
     }
 }

@@ -12,7 +12,7 @@ pub fn execute_move_unchecked(game: &Game, m: &PlayerMove) -> Game {
     next
 }
 
-fn execute_move_unchecked_inplace(game: &mut Game, player_move: &PlayerMove) {
+pub fn execute_move_unchecked_inplace(game: &mut Game, player_move: &PlayerMove) {
     let player = game.player;
 
     match player_move {
