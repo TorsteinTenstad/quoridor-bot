@@ -4,12 +4,16 @@ use rand::{Rng, rngs::ThreadRng, seq::IndexedRandom};
 use crate::{
     bot::dedi::walls::{Dir, get_board, get_wall_moves, wall_blocks, wall_collide},
     data_model::{
-        Game, MovePiece, PIECE_GRID_HEIGHT, Player, PlayerMove, WALL_GRID_HEIGHT, WALL_GRID_WIDTH,
-        WallOrientation, WallPosition,
+        Board, Game, MovePiece, PIECE_GRID_HEIGHT, PiecePosition, Player, PlayerMove,
+        WALL_GRID_HEIGHT, WALL_GRID_WIDTH, WallOrientation, WallPosition, Walls,
     },
     game_logic::execute_move_unchecked_inplace,
 };
-use std::time::{Duration, Instant};
+use std::{
+    cmp::Reverse,
+    collections::{BinaryHeap, HashMap},
+    time::{Duration, Instant},
+};
 
 pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
     let deadline = Instant::now() + duration;
@@ -61,20 +65,28 @@ fn wall_moves_iter() -> impl Iterator<Item = PlayerMove> {
 }
 
 fn get_legal_moves(game: &Game) -> impl Iterator<Item = PlayerMove> {
-    get_legal_piece_moves(game)
+    get_legal_piece_moves(game, game.player)
         .into_iter()
         .chain(get_legal_wall_moves(game))
 }
 
-fn get_legal_piece_moves(game: &Game) -> ArrayVec<PlayerMove, 8> {
-    let p1 = game.board.player_position(game.player);
+pub fn get_legal_piece_moves(game: &Game, player: Player) -> ArrayVec<PlayerMove, 8> {
+    let p1 = game.board.player_position(player);
+    let p2 = game.board.player_position(player.opponent());
+    get_legal_piece_moves_from_positions(&game.board.walls, p1, p2)
+}
+
+pub fn get_legal_piece_moves_from_positions(
+    walls: &Walls,
+    p1: &PiecePosition,
+    p2: &PiecePosition,
+) -> ArrayVec<PlayerMove, 8> {
     let p1 = (p1.x, p1.y);
-    let p2 = game.board.player_position(game.player.opponent());
     let p2 = (p2.x, p2.y);
     let mut moves: ArrayVec<PlayerMove, 8> = ArrayVec::new();
 
     let allow = |xy: (usize, usize), dir: Dir| {
-        dir.can_apply(xy) && !wall_blocks(&game.board.walls, xy.0 as isize, xy.1 as isize, dir)
+        dir.can_apply(xy) && !wall_blocks(walls, xy.0 as isize, xy.1 as isize, dir)
     };
 
     for dir in [Dir::PosX, Dir::PosY, Dir::NegX, Dir::NegY] {
@@ -112,6 +124,42 @@ fn get_legal_piece_moves(game: &Game) -> ArrayVec<PlayerMove, 8> {
     moves
 }
 
+pub fn get_legal_destinations(
+    walls: &Walls,
+    p1: (usize, usize),
+    p2: (usize, usize),
+) -> ArrayVec<(usize, usize), 8> {
+    let mut moves: ArrayVec<(usize, usize), 8> = ArrayVec::new();
+
+    let allow = |xy: (usize, usize), dir: Dir| {
+        dir.can_apply(xy) && !wall_blocks(walls, xy.0 as isize, xy.1 as isize, dir)
+    };
+
+    for dir in [Dir::PosX, Dir::PosY, Dir::NegX, Dir::NegY] {
+        if !allow(p1, dir) {
+            continue;
+        }
+        let (x, y) = dir.apply(p1);
+
+        if x == p2.0 && y == p2.1 {
+            if allow(p2, dir) {
+                moves.push(dir.apply(p2));
+            } else {
+                let (left, right) = dir.orthogonal();
+                for _dir in [left, right] {
+                    if allow(p2, _dir) {
+                        moves.push(_dir.apply(p2));
+                    }
+                }
+            }
+        } else {
+            moves.push(dir.apply(p1));
+        }
+    }
+
+    moves
+}
+
 fn get_legal_wall_moves(game: &Game) -> impl Iterator<Item = PlayerMove> {
     let game = game.clone();
     let p1 = game.player;
@@ -123,6 +171,8 @@ fn get_legal_wall_moves(game: &Game) -> impl Iterator<Item = PlayerMove> {
         .into_iter()
         .map(|m| m.0)
 }
+
+const MAX_DEPTH: usize = 128;
 
 fn simulate(
     game: &Game,
@@ -139,7 +189,7 @@ fn simulate(
 
     execute_move_unchecked_inplace(&mut game, &move_initial);
 
-    for _ in 1..64 {
+    for _ in 1..MAX_DEPTH {
         let p1_pos = game.board.player_position(p1);
         if p1_pos.y == p1_target {
             return 1;
@@ -148,12 +198,16 @@ fn simulate(
         if p2_pos.y == p2_target {
             return -1;
         }
+        if wall_moves.len() == 0 {
+            break;
+        }
 
-        let piece_moves = get_legal_piece_moves(&game);
-        let m = if piece_moves.len() > 0 && rng.random_bool(0.8) {
+        let m = if rng.random_bool(0.5) {
+            let piece_moves = get_legal_piece_moves(&game, game.player);
+            if piece_moves.len() == 0 {
+                return 0;
+            }
             piece_moves.choose(rng).unwrap().clone()
-        } else if wall_moves.len() == 0 {
-            return 0;
         } else {
             let idx = rng.random_range(0..wall_moves.len());
             wall_moves.swap_remove(idx).clone()
@@ -162,7 +216,18 @@ fn simulate(
         execute_move_unchecked_inplace(&mut game, &m);
     }
 
-    0
+    if wall_moves.len() > 0 {
+        return 0;
+    }
+
+    let a = a_star_distance(&game.board, game.player);
+    let b = a_star_distance(&game.board, game.player.opponent());
+
+    if a <= b {
+        if game.player == p1 { 1 } else { -1 }
+    } else {
+        if game.player == p1 { -1 } else { 1 }
+    }
 }
 
 fn target(player: Player) -> usize {
@@ -170,5 +235,52 @@ fn target(player: Player) -> usize {
         PIECE_GRID_HEIGHT - 1
     } else {
         0
+    }
+}
+
+pub fn a_star_distance(board: &Board, player: Player) -> Option<usize> {
+    let start = board.player_position(player).clone();
+    let start = (start.x, start.y);
+    let goal_h = heuristic(&start, player);
+
+    let mut open_set = BinaryHeap::new();
+    open_set.push((Reverse(goal_h), start.clone()));
+
+    let mut g_score = HashMap::<(usize, usize), usize>::new();
+    g_score.insert(start, 0);
+
+    let opponent_position = board.player_position(player.opponent());
+    let opponent_position = (opponent_position.x, opponent_position.y);
+
+    while let Some((Reverse(_), current)) = open_set.pop() {
+        let h = heuristic(&current, player);
+
+        if h == 0 {
+            return Some(g_score[&current]);
+        }
+
+        let current_g = g_score[&current];
+
+        let _neighbors = get_legal_destinations(&board.walls, current.clone(), opponent_position);
+
+        for neighbor in _neighbors {
+            let tentative_g = current_g + 1;
+
+            if tentative_g < *g_score.get(&neighbor).unwrap_or(&usize::MAX) {
+                g_score.insert(neighbor.clone(), tentative_g);
+
+                let f = tentative_g + heuristic(&neighbor, player);
+                open_set.push((Reverse(f), neighbor));
+            }
+        }
+    }
+
+    None
+}
+
+pub fn heuristic(pos: &(usize, usize), player: Player) -> usize {
+    match player {
+        Player::White => PIECE_GRID_HEIGHT - 1 - pos.1,
+        Player::Black => pos.1,
     }
 }
