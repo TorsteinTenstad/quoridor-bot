@@ -8,6 +8,7 @@ use crate::{
         all_move_piece_moves, execute_move_unchecked, is_move_piece_legal_with_players_at_positions,
     },
 };
+use arrayvec::ArrayVec;
 use std::hash::{Hash, Hasher};
 use std::{
     collections::HashMap,
@@ -117,7 +118,7 @@ fn _minimax(
         return Some((None, -INF));
     }
 
-    let mut moves: Vec<(PlayerMove, Board, Board)> = Vec::new();
+    let mut moves: ArrayVec<(PlayerMove, Board, Board), 136> = ArrayVec::new();
 
     for move_piece in all_move_piece_moves(pos_p1, pos_p2) {
         let legal = is_move_piece_legal_with_players_at_positions(

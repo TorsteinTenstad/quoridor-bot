@@ -221,6 +221,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arraydeque"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d902e3d592a523def97af8f317b08ce16b7ab854c1985a0c671e6f15cebc236"
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4515,6 +4521,8 @@ checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
 name = "quoridor-bot"
 version = "0.1.0"
 dependencies = [
+ "arraydeque",
+ "arrayvec",
  "burn",
  "burn-ndarray 0.14.0",
  "burn-tch",
