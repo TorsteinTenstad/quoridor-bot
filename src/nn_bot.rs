@@ -18,6 +18,7 @@ use burn::nn::conv::{Conv2d, Conv2dConfig};
 use burn::nn::{self, Initializer, Relu};
 use burn::tensor::{Tensor, backend::Backend};
 use rand::{prelude::*, rng};
+use std::path::Path;
 
 use crate::all_moves::ALL_MOVES;
 use crate::data_model::{
@@ -59,14 +60,13 @@ pub fn get_move(
 
     let prediction = predict_batch(network, &[encode(game)]);
 
-    let legal_moves: Vec<(usize, &f32)> = prediction
-        .first()
-        .unwrap()
-        .policy_logits
-        .iter()
-        .enumerate()
-        .filter(|(id, _)| is_move_legal(game, player, &action_from_id(*id as u16)))
-        .collect();
+    let legal_moves: Vec<(usize, &f32)> = prediction.first().unwrap().policy_logits.iter().enumerate()
+        .filter(|(id, _)|{is_move_legal(game, player, &action_from_id(*id as u16))}).collect();
+
+    // Handle edge case of no legal moves (shouldn't happen in valid game)
+    if legal_moves.is_empty() {
+        panic!("No legal moves available for player {:?}", player);
+    }
 
     // Apply temperature
     let max_logit = legal_moves
@@ -75,15 +75,26 @@ pub fn get_move(
         .fold(f32::NEG_INFINITY, f32::max);
     let exp_logits: Vec<f32> = legal_moves
         .iter()
-        .map(|&(_, logit)| ((logit - max_logit) / temperature).exp())
+        .map(|&(_, logit)| {
+            let val = ((logit - max_logit) / temperature).exp();
+            if val.is_finite() { val } else { 0.0 }
+        })
         .collect();
 
     // Normalize into probabilities
     let sum_exp: f32 = exp_logits.iter().sum();
-    let probs: Vec<f32> = exp_logits.iter().map(|x| x / sum_exp).collect();
+    
+    // Handle edge case where all probabilities are zero or non-finite
+    let probs: Vec<f32> = if sum_exp > 0.0 && sum_exp.is_finite() {
+        exp_logits.iter().map(|x| x / sum_exp).collect()
+    } else {
+        // Fallback to uniform distribution
+        vec![1.0 / legal_moves.len() as f32; legal_moves.len()]
+    };
 
     // Sample from distribution
-    let dist = rand::distr::weighted::WeightedIndex::new(&probs).unwrap();
+    let dist = rand::distr::weighted::WeightedIndex::new(&probs)
+        .expect("Failed to create weighted distribution from probabilities");
     let choice = dist.sample(&mut rng);
 
     // Extract the most likely move from the output
@@ -543,18 +554,20 @@ pub trait PolicyValueNet: Send + 'static {
 /// Burn network
 
 /// Quoridor AlphaZero-style network.
-pub struct QuoridorNet {
-    device: <NdArray as burn::prelude::Backend>::Device,
-    network_model: NetworkModel,
+pub struct QuoridorNet
+{
+    pub device: <NdArray as burn::prelude::Backend>::Device,
+    pub network_model: NetworkModel<NdArray>
 }
 
-#[derive(Module, Debug, Clone)]
-pub struct NetworkModel {
-    conv1: Conv2d<NdArray>,
-    conv2: Conv2d<NdArray>,
-    fc_policy: nn::Linear<NdArray>,
-    fc_value1: nn::Linear<NdArray>,
-    fc_value2: nn::Linear<NdArray>,
+#[derive(Module, Debug)]
+pub struct NetworkModel<B: Backend>
+{
+    pub conv1: Conv2d<B>,
+    pub conv2: Conv2d<B>,
+    pub fc_policy: nn::Linear<B>,
+    pub fc_value1: nn::Linear<B>,
+    pub fc_value2: nn::Linear<B>,
 }
 
 #[derive(Clone, Debug)]
@@ -567,11 +580,8 @@ impl QuoridorNet {
     pub fn new() -> Self {
         let device = <NdArray as burn::prelude::Backend>::Device::default();
 
-        let conv_cfg =
-            Conv2dConfig::new([7, 64], [3, 3]).with_initializer(Initializer::KaimingUniform {
-                gain: 1.0,
-                fan_out_only: false,
-            }); // in_channels=7, out=64
+        let conv_cfg = Conv2dConfig::new([8, 64], [3, 3])
+            .with_initializer(Initializer::KaimingUniform { gain: 1.0, fan_out_only: false }); // in_channels=8, out=64
 
         let conv1 = conv_cfg.init(&device);
 
@@ -612,10 +622,137 @@ impl QuoridorNet {
             },
         }
     }
+    
+    /// Create a new network with zero-initialized weights (for testing)
+    pub fn new_zero_weights() -> Self {
+        let device = <NdArray as burn::prelude::Backend>::Device::default();
+
+        let conv_cfg = Conv2dConfig::new([8, 64], [3, 3])
+            .with_bias(true)
+            .with_initializer(Initializer::Constant { value: 0.0 });
+        let conv1 = conv_cfg.init(&device);
+
+        let conv_cfg2 = Conv2dConfig::new([64, 64], [3, 3])
+            .with_bias(true)
+            .with_initializer(Initializer::Constant { value: 0.0 });
+        let conv2 = conv_cfg2.init(&device);
+
+        let fc_policy = nn::LinearConfig::new(64 * 5 * 5, 138)
+            .with_bias(true)
+            .with_initializer(Initializer::Constant { value: 0.0 })
+            .init(&device);
+
+        let fc_value1 = nn::LinearConfig::new(64 * 5 * 5, 64)
+            .with_bias(true)
+            .with_initializer(Initializer::Constant { value: 0.0 })
+            .init(&device);
+
+        let fc_value2 = nn::LinearConfig::new(64, 1)
+            .with_bias(true)
+            .with_initializer(Initializer::Constant { value: 0.0 })
+            .init(&device);
+
+        Self {
+            device,
+            network_model: NetworkModel { conv1, conv2, fc_policy, fc_value1, fc_value2 }
+        }
+    }
+    
+    /// Create a network that prefers upward moves (for testing/verification)
+    /// The policy outputs will strongly favor moves 0-3 which are "Up" moves
+    pub fn new_biased_upward() -> Self {
+        use burn::tensor::{Tensor, TensorData};
+        use burn::module::{Module, Param};
+        
+        let device = <NdArray as burn::prelude::Backend>::Device::default();
+
+        // Create conv layers with zero weights
+        let conv_cfg = Conv2dConfig::new([8, 64], [3, 3])
+            .with_bias(true)
+            .with_initializer(Initializer::Constant { value: 0.0 });
+        let conv1 = conv_cfg.init(&device);
+
+        let conv_cfg2 = Conv2dConfig::new([64, 64], [3, 3])
+            .with_bias(true)
+            .with_initializer(Initializer::Constant { value: 0.0 });
+        let conv2 = conv_cfg2.init(&device);
+
+        // Create policy layer with zero weights but biased output
+        let fc_policy = nn::LinearConfig::new(64 * 5 * 5, 138)
+            .with_bias(true)
+            .with_initializer(Initializer::Constant { value: 0.0 })
+            .init(&device);
+        
+        // Manually set the bias to favor upward moves
+        let mut bias_data = vec![-5.0; 138]; // Negative bias for most moves
+        bias_data[0] = 5.0;  // Up + Up collision - strong positive
+        bias_data[1] = 5.0;  // Up + Down collision
+        bias_data[2] = 5.0;  // Up + Left collision
+        bias_data[3] = 5.0;  // Up + Right collision
+        
+        let new_bias = Tensor::<NdArray, 1>::from_data(
+            TensorData::new(bias_data, [138]),
+            &device,
+        );
+        
+        // Replace the bias using the record system
+        let mut record = fc_policy.into_record();
+        record.bias = Some(Param::from_tensor(new_bias));
+        let fc_policy = Module::<NdArray>::load_record(
+            nn::LinearConfig::new(64 * 5 * 5, 138).init(&device),
+            record
+        );
+
+        let fc_value1 = nn::LinearConfig::new(64 * 5 * 5, 64)
+            .with_initializer(Initializer::Constant { value: 0.0 })
+            .init(&device);
+
+        let fc_value2 = nn::LinearConfig::new(64, 1)
+            .with_initializer(Initializer::Constant { value: 0.0 })
+            .init(&device);
+
+        Self {
+            device,
+            network_model: NetworkModel { conv1, conv2, fc_policy, fc_value1, fc_value2 }
+        }
+    }
+    
+    /// Save the network to a file
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<dyn std::error::Error>> {
+        use burn::record::{FullPrecisionSettings, NamedMpkFileRecorder, Recorder};
+        
+        let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
+        let record = Module::<NdArray>::into_record(self.network_model.clone());
+        recorder.record(record, path.as_ref().to_path_buf())
+            .map_err(|e| format!("Failed to save: {:?}", e))?;
+        Ok(())
+    }
+    
+    /// Load a network from a file
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+        use burn::record::{FullPrecisionSettings, NamedMpkFileRecorder, Recorder};
+        
+        let device = <NdArray as burn::prelude::Backend>::Device::default();
+        let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
+        
+        // Load the record
+        let record = recorder.load(path.as_ref().to_path_buf(), &device)
+            .map_err(|e| format!("Failed to load: {:?}", e))?;
+        
+        // Create a template network and load the record into it
+        let template = Self::new();
+        let network_model = Module::<NdArray>::load_record(template.network_model, record);
+        
+        Ok(Self {
+            device,
+            network_model,
+        })
+    }
 }
 
-impl NetworkModel {
-    pub fn forward(&self, x: Tensor<NdArray, 4>) -> NeuralNetOutput<NdArray> {
+impl<B: Backend> NetworkModel<B>
+{
+    pub fn forward(&self, x: Tensor<B, 4>) -> NeuralNetOutput<B> {
         let relu = Relu::new();
         // x: [batch, 7, 9, 9]
         let x = self.conv1.forward(x);
