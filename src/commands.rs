@@ -1,5 +1,5 @@
 use crate::{
-    bot::{BotCommand, Bots},
+    bot::{BotCommand, BotType, Bots},
     data_model::{Direction, Game, MovePiece, PlayerMove, WallOrientation, WallPosition},
     game_logic::is_move_legal,
     session::Session,
@@ -16,6 +16,10 @@ pub enum Command {
 pub enum AuxCommand {
     #[command(subcommand)]
     Bot(BotCommand),
+    BotMove {
+        #[arg()]
+        bot: BotType,
+    },
     Reset,
     Undo {
         #[arg(default_value_t = 1)]
@@ -47,6 +51,7 @@ pub fn execute_command(bots: &mut Bots, session: &mut Session, command: Command)
         Command::PlayMove(m) => session.make_move(m),
         Command::AuxCommand(aux_command) => match aux_command {
             AuxCommand::Bot(bot_command) => bots.execute_bot_command(session, bot_command),
+            AuxCommand::BotMove { bot } => session.make_move(bots.get_move(&session.game, &bot)),
             AuxCommand::Reset => *session = Session::default(),
             AuxCommand::Undo { moves } => {
                 for _ in 0..moves {

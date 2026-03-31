@@ -75,6 +75,9 @@ pub enum AbeCommand {
         #[arg(short, long)]
         heuristic: Option<Heuristic>,
     },
+    Heuristic {
+        heuristic: Option<Heuristic>,
+    },
     ExportCache {
         #[arg()]
         file: PathBuf,
@@ -151,8 +154,7 @@ impl Bot for Abe {
                                 heuristic.unwrap_or(self.default_heuristic),
                                 &mut self.cache,
                             );
-                            let m = eval.best_moves.into_iter().last().unwrap();
-                            println!("{} {:?}", m, duration);
+                            println!("{} {:?}", eval.score, duration);
                         } else {
                             println!("Invalid move");
                         }
@@ -169,6 +171,15 @@ impl Bot for Abe {
                     );
                     println!("Best move evaluates to {}", eval.score);
                 }
+            }
+            AbeCommand::Heuristic { heuristic } => {
+                let heuristic = heuristic.unwrap_or_default();
+                let val = heuristic.eval(
+                    &session.game,
+                    &mut Pathfinding::new(&session.game.board),
+                    true,
+                );
+                println!("{:?}:{}", heuristic, val);
             }
             AbeCommand::ExportCache { file: path } => match std::fs::File::create(path) {
                 Ok(file) => {
@@ -267,6 +278,7 @@ impl Display for BoardEvaluation {
             " (full chain: {})",
             self.best_moves
                 .iter()
+                .rev()
                 .map(|m| format!("{m};"))
                 .collect::<String>()
         )?;
@@ -315,7 +327,7 @@ fn alpha_beta(
         || game.board.player_position(Player::White).y == PIECE_GRID_HEIGHT - 1
         || game.board.player_position(Player::Black).y == 0
     {
-        let heuristic_board_score = heuristic.eval(game, pathfinding);
+        let heuristic_board_score = heuristic.eval(game, pathfinding, false);
         return AlphaBetaResult::Moves(BoardEvaluation {
             score: heuristic_board_score,
             best_moves: Default::default(),

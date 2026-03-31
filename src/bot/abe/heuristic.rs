@@ -18,16 +18,16 @@ pub enum Heuristic {
 }
 
 impl Heuristic {
-    pub fn eval(&self, game: &Game, pathfinding: &mut Pathfinding) -> isize {
+    pub fn eval(&self, game: &Game, pathfinding: &mut Pathfinding, verbose: bool) -> isize {
         match self {
-            Heuristic::WallsBehind => walls_behind(game, pathfinding),
-            Heuristic::Forward => forward(game, pathfinding),
-            Heuristic::Basic => basic(game, pathfinding),
+            Heuristic::WallsBehind => walls_behind(game, pathfinding, verbose),
+            Heuristic::Forward => forward(game, pathfinding, verbose),
+            Heuristic::Basic => basic(game, pathfinding, verbose),
         }
     }
 }
 
-fn walls_behind(game: &Game, pathfinding: &mut Pathfinding) -> isize {
+fn walls_behind(game: &Game, pathfinding: &mut Pathfinding, verbose: bool) -> isize {
     let black_pos = game.board.player_position(Player::Black);
     let black_distance = pathfinding
         .black
@@ -44,8 +44,8 @@ fn walls_behind(game: &Game, pathfinding: &mut Pathfinding) -> isize {
     }
     let white_walls_left = game.walls_left[Player::White.as_index()] as isize;
     let black_walls_left = game.walls_left[Player::Black.as_index()] as isize;
-    let white_wall_score = white_walls_left * (50 * black_distance * 5);
-    let black_wall_score = black_walls_left * (50 * white_distance * 5);
+    let white_wall_score = white_walls_left * (50 + black_distance * 5);
+    let black_wall_score = black_walls_left * (50 + white_distance * 5);
 
     let distance_score = (black_distance - white_distance) * 100;
     let wall_score = white_wall_score - black_wall_score;
@@ -87,17 +87,23 @@ fn walls_behind(game: &Game, pathfinding: &mut Pathfinding) -> isize {
     let walls_behind_score =
         (white_walls_behind - black_walls_behind) * (50 * walls_left / TOTAL_WALLS) as isize;
 
+    if verbose {
+        println!(
+            "wall_score: {wall_score}, distance_score: {distance_score}, walls_behind_score: {walls_behind_score}, "
+        );
+    }
+
     wall_score + distance_score + walls_behind_score
 }
 
-fn forward(game: &Game, _pathfinding: &mut Pathfinding) -> isize {
+fn forward(game: &Game, _pathfinding: &mut Pathfinding, _verbose: bool) -> isize {
     let black = game.board.player_position(Player::Black).y as isize;
     let white =
         PIECE_GRID_HEIGHT as isize - 1 - (game.board.player_position(Player::White).y as isize);
     100 * (black - white)
 }
 
-fn basic(game: &Game, pathfinding: &mut Pathfinding) -> isize {
+fn basic(game: &Game, pathfinding: &mut Pathfinding, _verbose: bool) -> isize {
     let black_distance = pathfinding
         .black
         .distance_to_goal(game.board.player_position(Player::Black), &game.board.walls)
