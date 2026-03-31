@@ -19,7 +19,7 @@ pub const INF: isize = isize::MAX - 1;
 
 pub fn minimax_iterative(game: &Game, duration: Duration, cache: &mut Cache) -> Option<PlayerMove> {
     let deadline = Some(Instant::now() + duration);
-    let mut depth = 1;
+    let mut depth = 2;
     let mut best_move: Option<PlayerMove> = None;
     loop {
         if let Some((_move, h)) = minimax(game, depth, deadline, cache) {
@@ -64,7 +64,9 @@ pub fn minimax(
     let board_p1 = get_board(game, game.player);
     let board_p2 = get_board(game, game.player.opponent());
 
-    _minimax(game, depth, -INF, INF, deadline, board_p1, board_p2, cache)
+    _minimax(
+        game, depth, depth, -INF, INF, deadline, board_p1, board_p2, cache,
+    )
 }
 
 fn target(player: Player) -> usize {
@@ -78,6 +80,7 @@ fn target(player: Player) -> usize {
 fn _minimax(
     game: &Game,
     depth: usize,
+    depth_initial: usize,
     alpha: isize,
     beta: isize,
     deadline: Option<Instant>,
@@ -133,8 +136,11 @@ fn _minimax(
         }
     }
 
-    for move_wall in get_wall_moves(game, &board_p1, &board_p2) {
-        moves.push(move_wall);
+    let skip = depth_initial % 2 == 1 && depth <= 1;
+    if !skip {
+        for move_wall in get_wall_moves(game, &board_p1, &board_p2) {
+            moves.push(move_wall);
+        }
     }
 
     if moves.len() == 0 {
@@ -150,6 +156,7 @@ fn _minimax(
         if let Some((_, h_next)) = _minimax(
             &game_next,
             depth - 1,
+            depth_initial,
             -beta,
             -alpha,
             deadline,
@@ -196,7 +203,7 @@ fn _heuristic(game: &Game, player: Player, board: &Board) -> isize {
 
     let dis = match tile {
         Tile::Invalid => {
-            println!("\n!!!\nERROR(_heuristic:196)\n!!!\n");
+            println!("\n!!!\nERROR(_heuristic:199)\n!!!\n");
             println!("{:?}", board);
             return 0;
         }
@@ -221,6 +228,10 @@ fn _heuristic(game: &Game, player: Player, board: &Board) -> isize {
         Player::Black => ahead_black,
         Player::White => ahead_white,
     };
+    let sign: isize = match player {
+        Player::Black => -1,
+        Player::White => 1,
+    };
 
     for y in 0..WALL_GRID_HEIGHT {
         for x in 0..WALL_GRID_WIDTH {
@@ -229,9 +240,9 @@ fn _heuristic(game: &Game, player: Player, board: &Board) -> isize {
                 Some(WallOrientation::Horizontal) => {
                     let dx = x as isize - pos.x as isize;
                     if y_ahead(y, pos.y) {
-                        h += if dx.abs() <= 1 { -3 } else { -2 }
+                        h += if dx.abs() <= 1 { -5 } else { -3 }
                     } else {
-                        h += if dx.abs() <= 1 { 2 } else { 1 }
+                        h += y as isize * sign;
                     }
                 }
                 Some(WallOrientation::Vertical) => {
@@ -239,7 +250,7 @@ fn _heuristic(game: &Game, player: Player, board: &Board) -> isize {
                     if y_ahead(y, pos.y) {
                         h += if dx.abs() <= 1 { 0 } else { -1 }
                     } else {
-                        h += if dx.abs() <= 1 { 0 } else { 0 }
+                        // h += if dx.abs() <= 1 { 0 } else { 0 }
                     }
                 }
             }
