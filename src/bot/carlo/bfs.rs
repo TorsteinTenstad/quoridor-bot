@@ -295,6 +295,16 @@ impl Bfs {
     }
 }
 
+pub fn game_winner(game: &Game) -> Option<Player> {
+    if game.board.player_positions[0].y == PIECE_GRID_HEIGHT - 1 {
+        return Some(Player::White);
+    }
+    if game.board.player_positions[1].y == 0 {
+        return Some(Player::Black);
+    }
+    None
+}
+
 /// Returns iterator over (dx, dy) for valid neighbors on the board.
 fn board_neighbors(game: &Game, x: i8, y: i8) -> impl Iterator<Item = (i8, i8)> {
     [(-1, 0), (1, 0), (0, -1), (0, 1)]
