@@ -29,6 +29,7 @@ serde_json_any_key = "2.1.0"
 ntest = "0.9.5"
 priority-queue = "2.7.0"
 ctrlc = "3.5.2"
+rayon = "1.8"
 
 # needed for flamegraph
 # [profile.release]
