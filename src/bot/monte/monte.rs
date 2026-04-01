@@ -10,8 +10,8 @@ use arrayvec::ArrayVec;
 use rand::{Rng, seq::IndexedRandom};
 use rand::{SeedableRng, rngs::SmallRng};
 use rayon::prelude::*;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicIsize, Ordering};
+use std::sync::{Arc, atomic::AtomicUsize};
 use std::{
     cmp::Reverse,
     collections::{BinaryHeap, HashMap},
@@ -21,8 +21,9 @@ use std::{
 pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
     let deadline = Instant::now() + duration;
 
-    let legal_moves: ArrayVec<PlayerMove, 136> = get_legal_moves(game).collect();
-    let wall_moves: ArrayVec<PlayerMove, 128> = wall_moves_iter()
+    let legal_moves: ArrayVec<_, 136> = get_legal_moves(game).collect();
+    // let legal_moves = balance_moves(&legal_moves);
+    let wall_moves: ArrayVec<_, 128> = wall_moves_iter()
         .filter(|m| match m {
             PlayerMove::MovePiece(_) => false,
             PlayerMove::PlaceWall {
@@ -32,17 +33,35 @@ pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
         })
         .collect();
 
-    let win_count = run_parallel(&game, &legal_moves, &wall_moves, deadline);
+    let (win_counts, iterations) = run_parallel(game, &legal_moves, &wall_moves, deadline);
 
-    let best_idx = win_count
+    let win_rates: Vec<f32> = win_counts
         .iter()
-        .enumerate()
-        .max_by_key(|(_, count)| **count)
-        .map(|(i, _)| i)
-        .expect("No legal moves");
+        .zip(iterations.iter())
+        .map(|(&wins, &iters)| {
+            if iters == 0 {
+                0.0
+            } else {
+                wins as f32 / iters as f32
+            }
+        })
+        .collect();
 
-    // println!("{:?} / {:?}", win_count[best_idx], iterations);
-    println!("{:?}", win_count);
+    let mut indices: Vec<_> = (0..win_rates.len()).collect();
+    indices.sort_by(|&i, &j| win_rates[j].partial_cmp(&win_rates[i]).unwrap());
+
+    let top_three = indices.clone().into_iter().take(3);
+
+    for idx in top_three {
+        println!(
+            "{:.1} % ({:?}): {:?}",
+            win_rates[idx] * 100.0,
+            iterations[idx],
+            legal_moves[idx],
+        );
+    }
+
+    let best_idx = *indices.first().unwrap();
     legal_moves[best_idx].clone()
 }
 
@@ -55,16 +74,19 @@ fn run_parallel(
     legal_moves: &[PlayerMove],
     wall_moves: &[PlayerMove],
     deadline: Instant,
-) -> Vec<isize> {
+) -> (Vec<isize>, Vec<usize>) {
     let n = legal_moves.len();
     let win_counts: Vec<AtomicIsize> = (0..n).map(|_| AtomicIsize::new(0)).collect();
     let win_counts = Arc::new(win_counts);
+    let iterations: Vec<AtomicUsize> = (0..n).map(|_| AtomicUsize::new(0)).collect();
+    let iterations = Arc::new(iterations);
 
     let mut candidates: Vec<usize> = (0..n).collect();
 
     while Instant::now() < deadline && candidates.len() > 1 {
         let shared_candidates = Arc::new(candidates.clone());
         let win_counts_ref = win_counts.clone();
+        let iterations_ref = iterations.clone();
 
         (0..rayon::current_num_threads())
             .into_par_iter()
@@ -75,6 +97,7 @@ fn run_parallel(
                         for &i in shared_candidates.iter() {
                             let r = simulate(game, rng, legal_moves[i].clone(), wall_moves);
                             win_counts_ref[i].fetch_add(r, Ordering::Relaxed);
+                            iterations_ref[i].fetch_add(1, Ordering::Relaxed);
                         }
 
                         if Instant::now() >= deadline {
@@ -92,10 +115,16 @@ fn run_parallel(
         candidates.truncate(retain_count.max(1));
     }
 
-    win_counts
-        .iter()
-        .map(|a| a.load(Ordering::Relaxed))
-        .collect()
+    (
+        win_counts
+            .iter()
+            .map(|a| a.load(Ordering::Relaxed))
+            .collect(),
+        iterations
+            .iter()
+            .map(|a| a.load(Ordering::Relaxed))
+            .collect(),
+    )
 }
 
 fn wall_moves_iter() -> impl Iterator<Item = PlayerMove> {
@@ -110,6 +139,40 @@ fn wall_moves_iter() -> impl Iterator<Item = PlayerMove> {
             })
         })
 }
+
+// pub fn balance_moves(moves: &[PlayerMove]) -> Vec<PlayerMove> {
+//     use PlayerMove::*;
+
+//     let mut place_walls = Vec::new();
+//     let mut move_pieces = Vec::new();
+
+//     for m in moves {
+//         match m {
+//             PlaceWall { .. } => place_walls.push(m.clone()),
+//             MovePiece(_) => move_pieces.push(m.clone()),
+//         }
+//     }
+
+//     fn pad_to_len<T: Clone>(v: &mut Vec<T>, target: usize) {
+//         if v.is_empty() {
+//             return;
+//         }
+//         let clone = v.clone();
+//         while v.len() < target {
+//             v.extend_from_slice(&clone);
+//         }
+//     }
+
+//     let max_len = place_walls.len().max(move_pieces.len());
+
+//     pad_to_len(&mut place_walls, max_len);
+//     pad_to_len(&mut move_pieces, max_len);
+
+//     place_walls
+//         .into_iter()
+//         .chain(move_pieces.into_iter())
+//         .collect()
+// }
 
 fn get_legal_moves(game: &Game) -> impl Iterator<Item = PlayerMove> {
     get_legal_piece_moves(game, game.player)
