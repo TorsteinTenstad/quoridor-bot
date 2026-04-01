@@ -4,7 +4,8 @@ use crate::{
         Game, Player, PlayerMove, WALL_GRID_HEIGHT, WALL_GRID_WIDTH, WallOrientation, WallPosition,
     },
     game_logic::{
-        all_move_piece_moves, execute_move_unchecked, is_move_piece_legal_with_players_at_positions,
+        all_move_piece_moves, execute_move_unchecked,
+        is_move_piece_legal_with_players_at_positions, new_position_after_move_piece_unchecked,
     },
 };
 use std::fmt::Debug;
@@ -18,7 +19,7 @@ pub struct Board {
 }
 
 impl Debug for Board {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // for row in self.path {
         //     for square in row {
         //         let _ = write!(f, "{:3}{:?} ", square.1, square.0);
@@ -75,7 +76,7 @@ impl Board {
         }
     }
 
-    pub fn moves(&self) -> impl Iterator<Item = PlayerMove> {
+    pub fn moves(&self) -> impl Iterator<Item = (PlayerMove, u8)> {
         let player_moves = {
             let p1 = self.game.board.player_position(self.game.player);
             let p2 = self.game.board.player_position(self.game.player.opponent());
@@ -84,7 +85,15 @@ impl Board {
                 .filter(|m| {
                     is_move_piece_legal_with_players_at_positions(&self.game.board.walls, p1, p2, m)
                 })
-                .map(|m| PlayerMove::MovePiece(m))
+                .map(|m| {
+                    let pos = new_position_after_move_piece_unchecked(p1, &m, p2);
+
+                    let dist = match self.game.player {
+                        Player::White => self.bfs_white.path[pos.y][pos.x].1,
+                        Player::Black => self.bfs_black.path[pos.y][pos.x].1,
+                    };
+                    (PlayerMove::MovePiece(m), dist)
+                })
         };
 
         // TODO: better wall_moves conditional
@@ -108,14 +117,24 @@ impl Board {
                             let orientation =
                                 [WallOrientation::Horizontal, WallOrientation::Vertical][orient];
 
-                            if !self.valid_wall(x, y, orientation) {
+                            let (valid, dist_w, dist_b) = self.valid_wall(x, y, orientation);
+                            if !valid {
                                 return None;
                             }
 
-                            Some(PlayerMove::PlaceWall {
-                                orientation,
-                                position: WallPosition { x, y },
-                            })
+                            let dist = if self.game.player == Player::White {
+                                dist_w
+                            } else {
+                                dist_b
+                            };
+
+                            Some((
+                                PlayerMove::PlaceWall {
+                                    orientation,
+                                    position: WallPosition { x, y },
+                                },
+                                dist,
+                            ))
                         })
                     })
                 });
@@ -123,7 +142,7 @@ impl Board {
         player_moves.chain(wall_moves)
     }
 
-    pub fn valid_wall(&self, x: usize, y: usize, orientation: WallOrientation) -> bool {
+    pub fn valid_wall(&self, x: usize, y: usize, orientation: WallOrientation) -> (bool, u8, u8) {
         let mut board = self.clone();
         board.place_wall(x, y, orientation);
 
@@ -141,9 +160,9 @@ impl Board {
             board.bfs_white.path[white_pos.y][white_pos.x],
             board.bfs_black.path[black_pos.y][black_pos.x],
         ) {
-            ((PathBlock::Unreachable, _), _) => false,
-            (_, (PathBlock::Unreachable, _)) => false,
-            _ => true,
+            ((PathBlock::Unreachable, _), _) => (false, 0, 0),
+            (_, (PathBlock::Unreachable, _)) => (false, 0, 0),
+            ((_, dist_w), (_, dist_b)) => (true, dist_w, dist_b),
         }
     }
 
