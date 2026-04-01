@@ -22,7 +22,7 @@ pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
     let deadline = Instant::now() + duration;
 
     let legal_moves: ArrayVec<_, 136> = get_legal_moves(game).collect();
-    // let legal_moves = balance_moves(&legal_moves);
+    let legal_moves = balance_moves(&legal_moves);
     let wall_moves: ArrayVec<_, 128> = wall_moves_iter()
         .filter(|m| match m {
             PlayerMove::MovePiece(_) => false,
@@ -140,39 +140,33 @@ fn wall_moves_iter() -> impl Iterator<Item = PlayerMove> {
         })
 }
 
-// pub fn balance_moves(moves: &[PlayerMove]) -> Vec<PlayerMove> {
-//     use PlayerMove::*;
-
-//     let mut place_walls = Vec::new();
-//     let mut move_pieces = Vec::new();
-
-//     for m in moves {
-//         match m {
-//             PlaceWall { .. } => place_walls.push(m.clone()),
-//             MovePiece(_) => move_pieces.push(m.clone()),
-//         }
-//     }
-
-//     fn pad_to_len<T: Clone>(v: &mut Vec<T>, target: usize) {
-//         if v.is_empty() {
-//             return;
-//         }
-//         let clone = v.clone();
-//         while v.len() < target {
-//             v.extend_from_slice(&clone);
-//         }
-//     }
-
-//     let max_len = place_walls.len().max(move_pieces.len());
-
-//     pad_to_len(&mut place_walls, max_len);
-//     pad_to_len(&mut move_pieces, max_len);
-
-//     place_walls
-//         .into_iter()
-//         .chain(move_pieces.into_iter())
-//         .collect()
-// }
+pub fn balance_moves(moves: &[PlayerMove]) -> Vec<PlayerMove> {
+    use PlayerMove::*;
+    let mut place_walls = Vec::new();
+    let mut move_pieces = Vec::new();
+    for m in moves {
+        match m {
+            PlaceWall { .. } => place_walls.push(m.clone()),
+            MovePiece(_) => move_pieces.push(m.clone()),
+        }
+    }
+    fn pad_to_len<T: Clone>(v: &mut Vec<T>, target: usize) {
+        if v.is_empty() {
+            return;
+        }
+        let clone = v.clone();
+        while v.len() < target {
+            v.extend_from_slice(&clone);
+        }
+    }
+    let max_len = place_walls.len().max(move_pieces.len());
+    pad_to_len(&mut place_walls, max_len);
+    pad_to_len(&mut move_pieces, max_len);
+    place_walls
+        .into_iter()
+        .chain(move_pieces.into_iter())
+        .collect()
+}
 
 fn get_legal_moves(game: &Game) -> impl Iterator<Item = PlayerMove> {
     get_legal_piece_moves(game, game.player)
