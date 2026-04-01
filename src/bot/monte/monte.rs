@@ -46,6 +46,10 @@ pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
     legal_moves[best_idx].clone()
 }
 
+const BATCH_ROUNDS: usize = 10_000;
+const MIN_SPLIT_SIZE: usize = 2;
+const RETAIN_RATIO: f32 = 0.5;
+
 fn run_parallel(
     game: &Game,
     legal_moves: &[PlayerMove],
@@ -56,19 +60,37 @@ fn run_parallel(
     let win_counts: Vec<AtomicIsize> = (0..n).map(|_| AtomicIsize::new(0)).collect();
     let win_counts = Arc::new(win_counts);
 
-    (0..rayon::current_num_threads())
-        .into_par_iter()
-        .for_each_init(
-            || SmallRng::from_os_rng(),
-            |rng, _thread_id| {
-                while Instant::now() < deadline {
-                    for (i, m) in legal_moves.iter().enumerate() {
-                        let r = simulate(game, rng, m.clone(), wall_moves);
-                        win_counts[i].fetch_add(r, Ordering::Relaxed);
+    let mut candidates: Vec<usize> = (0..n).collect();
+
+    while Instant::now() < deadline && candidates.len() > 1 {
+        let shared_candidates = Arc::new(candidates.clone());
+        let win_counts_ref = win_counts.clone();
+
+        (0..rayon::current_num_threads())
+            .into_par_iter()
+            .for_each_init(
+                || SmallRng::from_os_rng(),
+                |rng, _| {
+                    for _ in 0..BATCH_ROUNDS {
+                        for &i in shared_candidates.iter() {
+                            let r = simulate(game, rng, legal_moves[i].clone(), wall_moves);
+                            win_counts_ref[i].fetch_add(r, Ordering::Relaxed);
+                        }
+
+                        if Instant::now() >= deadline {
+                            break;
+                        }
                     }
-                }
-            },
-        );
+                },
+            );
+
+        if candidates.len() <= MIN_SPLIT_SIZE {
+            continue;
+        }
+        candidates.sort_by_key(|&i| -win_counts[i].load(Ordering::Relaxed));
+        let retain_count = (candidates.len() as f32 * RETAIN_RATIO).ceil() as usize;
+        candidates.truncate(retain_count.max(1));
+    }
 
     win_counts
         .iter()
