@@ -96,9 +96,10 @@ fn run_parallel(
                 |(rng, local), _| {
                     for _ in 0..BATCH_ROUNDS {
                         for &i in shared_candidates.iter() {
-                            let r = simulate(game, rng, &legal_moves[i], wall_moves);
-                            local[i].0 += r;
-                            local[i].1 += 1;
+                            if let Some(r) = simulate(game, rng, &legal_moves[i], wall_moves) {
+                                local[i].0 += r;
+                                local[i].1 += 1;
+                            }
                         }
                     }
 
@@ -114,13 +115,19 @@ fn run_parallel(
 
         candidates = (0..count_all).collect();
         candidates.sort_by(|&i, &j| {
-            let a = win_counts[i].load(Ordering::Relaxed) as f32
-                / iterations[i].load(Ordering::Relaxed) as f32;
-
-            let b = win_counts[j].load(Ordering::Relaxed) as f32
-                / iterations[j].load(Ordering::Relaxed) as f32;
-
-            b.partial_cmp(&a).unwrap()
+            let iter_i = iterations[i].load(Ordering::Relaxed);
+            let iter_j = iterations[j].load(Ordering::Relaxed);
+            let a = if iter_i == 0 {
+                0.0
+            } else {
+                win_counts[i].load(Ordering::Relaxed) as f32 / iter_i as f32
+            };
+            let b = if iter_j == 0 {
+                0.0
+            } else {
+                win_counts[j].load(Ordering::Relaxed) as f32 / iter_j as f32
+            };
+            b.partial_cmp(&a).unwrap_or(std::cmp::Ordering::Equal)
         });
 
         candidates.truncate(count_candidates);
@@ -266,7 +273,7 @@ fn simulate(
     rng: &mut SmallRng,
     move_initial: &PlayerMove,
     wall_moves: &[PlayerMove],
-) -> isize {
+) -> Option<isize> {
     let p1 = game.player;
     let p2 = game.player.opponent();
     let p1_target = target(p1);
@@ -283,11 +290,11 @@ fn simulate(
     for _ in 1..MAX_DEPTH {
         let p1_pos = game.board.player_position(p1);
         if p1_pos.y == p1_target {
-            return 1;
+            return Some(1);
         }
         let p2_pos = game.board.player_position(p2);
         if p2_pos.y == p2_target {
-            return -1;
+            return Some(-1);
         }
 
         let walls_left = game.walls_left[game.player.as_index()];
@@ -300,7 +307,7 @@ fn simulate(
         let m = if walls_left == 0 || rng.random_bool(0.8) {
             let piece_moves = get_legal_piece_moves(&game, game.player);
             if piece_moves.len() == 0 {
-                return 0;
+                return None;
             }
 
             let idx = rng.random_range(0..piece_moves.len());
@@ -315,16 +322,16 @@ fn simulate(
     }
 
     if wall_move_idx_idx < wall_move_count {
-        return 0;
+        return None;
     }
 
     let a = a_star_distance(&game.board, game.player);
     let b = a_star_distance(&game.board, game.player.opponent());
 
     if a <= b {
-        if game.player == p1 { 1 } else { -1 }
+        if game.player == p1 { Some(1) } else { Some(-1) }
     } else {
-        if game.player == p1 { -1 } else { 1 }
+        if game.player == p1 { Some(-1) } else { Some(1) }
     }
 }
 
