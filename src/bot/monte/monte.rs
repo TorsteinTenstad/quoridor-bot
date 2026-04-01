@@ -18,6 +18,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+const BATCH_ROUNDS: usize = 1_000;
+const MIN_CANDIDATE_COUNT: usize = 2;
+const RETAIN_RATIO: f32 = 0.8;
+const PIECE_PROBABILITY: f64 = 0.8;
+const MAX_DEPTH: usize = 64;
+
 pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
     let deadline = Instant::now() + duration;
 
@@ -63,10 +69,6 @@ pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
     let best_idx = *indices.first().unwrap();
     legal_moves[best_idx].clone()
 }
-
-const BATCH_ROUNDS: usize = 1_000;
-const MIN_CANDIDATE_COUNT: usize = 2;
-const RETAIN_RATIO: f32 = 0.8;
 
 fn run_parallel(
     game: &Game,
@@ -266,8 +268,6 @@ fn get_legal_wall_moves(game: &Game) -> impl Iterator<Item = PlayerMove> {
         .map(|m| m.0)
 }
 
-const MAX_DEPTH: usize = 64;
-
 fn simulate(
     game: &Game,
     rng: &mut SmallRng,
@@ -304,7 +304,7 @@ fn simulate(
             break;
         }
 
-        let m = if walls_left == 0 || rng.random_bool(0.8) {
+        let m = if walls_left == 0 || rng.random_bool(PIECE_PROBABILITY) {
             let piece_moves = get_legal_piece_moves(&game, game.player);
             if piece_moves.len() == 0 {
                 return None;
