@@ -6,7 +6,7 @@ use crate::{
     game_logic::execute_move_unchecked,
 };
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct Node {
     pub id: u64,
     pub games: usize,
@@ -24,7 +24,10 @@ impl Node {
     }
 
     pub fn u(&self, games: usize) -> f64 {
-        1_f64 * f64::sqrt(f64::log(games.max(1) as f64, 2 as f64) / (1 + self.games) as f64)
+        if self.games == 0 {
+            return 1000_f64;
+        }
+        1_f64 * f64::sqrt(f64::log2(games.max(1) as f64) / self.games as f64)
     }
 
     pub fn score(&self, games: usize) -> f64 {
@@ -35,7 +38,7 @@ impl Node {
         if self.finished {
             panic!("already finished")
         }
-        if ts.children.get(&self.id) != None || self.finished {
+        if ts.children.get(&self.id) != None {
             panic!("already expanded")
         }
 
@@ -66,18 +69,6 @@ impl Node {
             self.expand(ts, board);
         }
 
-        // if ts
-        //     .children
-        //     .get(&self.id)
-        //     .expect("just expanded")
-        //     .iter()
-        //     .filter(|(m, hash)| !visited.contains(hash))
-        //     .count()
-        //     == 0
-        // {
-        //     println!("pp{:?}", board.game.board.player_positions)
-        // }
-
         ts.children
             .get(&self.id)
             .expect("just expanded")
@@ -86,10 +77,11 @@ impl Node {
                 let child = ts.nodes.get(hash).expect("all child nodes exists in tree");
                 (
                     if explore {
-                        -child.q()
-                    } else {
                         child.score(self.games)
-                    } - (visited.get(hash).cloned().unwrap_or(0) as f64),
+                            - 1000f64 * (visited.get(hash).cloned().unwrap_or(0) as f64)
+                    } else {
+                        -child.q()
+                    },
                     m,
                     hash,
                 )

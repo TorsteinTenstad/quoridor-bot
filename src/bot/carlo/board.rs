@@ -170,10 +170,10 @@ impl Board {
             }
             WallOrientation::Vertical => {
                 if y > 0 {
-                    self.wall_moves[y - 1][x][0] = false;
+                    self.wall_moves[y - 1][x][1] = false;
                 }
                 if y < WALL_GRID_HEIGHT - 1 {
-                    self.wall_moves[y + 1][x][0] = false;
+                    self.wall_moves[y + 1][x][1] = false;
                 }
             }
         }
