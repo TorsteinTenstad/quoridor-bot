@@ -7,7 +7,7 @@ use crate::{
     game_logic::execute_move_unchecked_inplace,
 };
 use arrayvec::ArrayVec;
-use rand::{Rng, seq::IndexedRandom};
+use rand::{Rng, seq::SliceRandom};
 use rand::{SeedableRng, rngs::SmallRng};
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicIsize, Ordering};
@@ -22,7 +22,6 @@ pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
     let deadline = Instant::now() + duration;
 
     let legal_moves: ArrayVec<_, 136> = get_legal_moves(game).collect();
-    let legal_moves = balance_moves(&legal_moves);
     let wall_moves: ArrayVec<_, 128> = wall_moves_iter()
         .filter(|m| match m {
             PlayerMove::MovePiece(_) => false,
@@ -65,9 +64,9 @@ pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
     legal_moves[best_idx].clone()
 }
 
-const BATCH_ROUNDS: usize = 10_000;
+const BATCH_ROUNDS: usize = 1_000;
 const MIN_CANDIDATE_COUNT: usize = 2;
-const RETAIN_RATIO: f32 = 0.5;
+const RETAIN_RATIO: f32 = 0.8;
 
 fn run_parallel(
     game: &Game,
@@ -93,24 +92,25 @@ fn run_parallel(
         (0..rayon::current_num_threads())
             .into_par_iter()
             .for_each_init(
-                || SmallRng::from_os_rng(),
-                |rng, _| {
+                || (SmallRng::from_os_rng(), vec![(0isize, 0usize); count_all]),
+                |(rng, local), _| {
                     for _ in 0..BATCH_ROUNDS {
                         for &i in shared_candidates.iter() {
-                            let r = simulate(game, rng, legal_moves[i].clone(), wall_moves);
-                            win_counts_ref[i].fetch_add(r, Ordering::Relaxed);
-                            iterations_ref[i].fetch_add(1, Ordering::Relaxed);
+                            let r = simulate(game, rng, &legal_moves[i], wall_moves);
+                            local[i].0 += r;
+                            local[i].1 += 1;
                         }
+                    }
 
-                        if Instant::now() >= deadline {
-                            break;
-                        }
+                    for (i, (w, it)) in local.iter().enumerate() {
+                        win_counts_ref[i].fetch_add(*w, Ordering::Relaxed);
+                        iterations_ref[i].fetch_add(*it, Ordering::Relaxed);
                     }
                 },
             );
 
         count_candidates =
-            ((count_candidates as f32 * RETAIN_RATIO).ceil() as usize).max(MIN_CANDIDATE_COUNT);
+            ((count_candidates as f32 * RETAIN_RATIO).floor() as usize).max(MIN_CANDIDATE_COUNT);
 
         candidates = (0..count_all).collect();
         candidates.sort_by(|&i, &j| {
@@ -149,34 +149,6 @@ fn wall_moves_iter() -> impl Iterator<Item = PlayerMove> {
                 })
             })
         })
-}
-
-pub fn balance_moves(moves: &[PlayerMove]) -> Vec<PlayerMove> {
-    use PlayerMove::*;
-    let mut place_walls = Vec::new();
-    let mut move_pieces = Vec::new();
-    for m in moves {
-        match m {
-            PlaceWall { .. } => place_walls.push(m.clone()),
-            MovePiece(_) => move_pieces.push(m.clone()),
-        }
-    }
-    fn pad_to_len<T: Clone>(v: &mut Vec<T>, target: usize) {
-        if v.is_empty() {
-            return;
-        }
-        let clone = v.clone();
-        while v.len() < target {
-            v.extend_from_slice(&clone);
-        }
-    }
-    let max_len = place_walls.len().max(move_pieces.len());
-    pad_to_len(&mut place_walls, max_len);
-    pad_to_len(&mut move_pieces, max_len);
-    place_walls
-        .into_iter()
-        .chain(move_pieces.into_iter())
-        .collect()
 }
 
 fn get_legal_moves(game: &Game) -> impl Iterator<Item = PlayerMove> {
@@ -292,7 +264,7 @@ const MAX_DEPTH: usize = 64;
 fn simulate(
     game: &Game,
     rng: &mut SmallRng,
-    move_initial: PlayerMove,
+    move_initial: &PlayerMove,
     wall_moves: &[PlayerMove],
 ) -> isize {
     let p1 = game.player;
@@ -300,7 +272,11 @@ fn simulate(
     let p1_target = target(p1);
     let p2_target = target(p2);
     let mut game = game.clone();
-    let mut wall_moves: ArrayVec<_, 128> = wall_moves.iter().collect();
+
+    let mut wall_move_indices: ArrayVec<usize, 128> = (0..wall_moves.len()).collect();
+    wall_move_indices.shuffle(rng);
+    let wall_move_count = wall_move_indices.len();
+    let mut wall_move_idx_idx = 0;
 
     execute_move_unchecked_inplace(&mut game, &move_initial);
 
@@ -317,7 +293,7 @@ fn simulate(
         let walls_left = game.walls_left[game.player.as_index()];
         let walls_left_opponent = game.walls_left[game.player.opponent().as_index()];
 
-        if wall_moves.len() == 0 || walls_left + walls_left_opponent == 0 {
+        if wall_move_idx_idx >= wall_move_count || walls_left + walls_left_opponent == 0 {
             break;
         }
 
@@ -326,16 +302,19 @@ fn simulate(
             if piece_moves.len() == 0 {
                 return 0;
             }
-            piece_moves.choose(rng).unwrap().clone()
+
+            let idx = rng.random_range(0..piece_moves.len());
+            piece_moves[idx].clone()
         } else {
-            let idx = rng.random_range(0..wall_moves.len());
-            wall_moves.swap_remove(idx).clone()
+            let idx = wall_move_indices[wall_move_idx_idx];
+            wall_move_idx_idx += 1;
+            wall_moves[idx].clone()
         };
 
         execute_move_unchecked_inplace(&mut game, &m);
     }
 
-    if wall_moves.len() > 0 {
+    if wall_move_idx_idx < wall_move_count {
         return 0;
     }
 
