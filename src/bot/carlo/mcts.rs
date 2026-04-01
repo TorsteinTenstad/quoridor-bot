@@ -17,7 +17,7 @@ pub struct Mcts {
 }
 
 impl Mcts {
-    pub fn add_node(&mut self, game: &Game) -> u64 {
+    pub fn add_node(&mut self, game: &Game, dist: Option<u8>) -> u64 {
         let mut hasher = DefaultHasher::new();
         game.hash(&mut hasher);
         let hash = hasher.finish();
@@ -28,6 +28,7 @@ impl Mcts {
 
         let mut node = Node::default();
         node.finished = game_winner(&game) != None;
+        node.dist = dist;
         node.id = hash;
 
         self.nodes.insert(hash, node);
@@ -35,7 +36,7 @@ impl Mcts {
     }
 
     fn get_node_by_state(&mut self, game: &Game) -> &mut Node {
-        let hash = self.add_node(game);
+        let hash = self.add_node(game, None);
         self.nodes.get_mut(&hash).expect("just added")
     }
 
@@ -43,14 +44,19 @@ impl Mcts {
         let mut root = self.get_node_by_state(root_game).clone();
         let root_board = Board::from(root_game);
 
+        let mut sims = 0;
+        let mut depth = 0;
+
         let start_time = std::time::Instant::now();
         while start_time.elapsed() < Duration::from_secs(5) {
+            sims += 1;
             let mut node = self.nodes.get(&root.id).unwrap().to_owned();
             let mut stack = vec![root.id];
             let mut board = root_board.clone();
             let mut visited = HashMap::<u64, usize>::new();
             let mut finished = node.finished;
             while !finished {
+                depth += 1;
                 visited.insert(node.id, visited.get(&node.id).cloned().unwrap_or(0) + 1);
                 let (m, child) = node.pick_move(self, &board, &visited, true);
                 stack.push(child);
@@ -73,9 +79,10 @@ impl Mcts {
         }
 
         println!("{}: {:?}", "r", self.nodes.get(&root.id).unwrap());
-        for (_, c) in self.children.get(&root.id).unwrap() {
-            println!("{}: {:?}", "c", self.nodes.get(c).unwrap());
+        for (m, c) in self.children.get(&root.id).unwrap() {
+            println!("{}: {:?} {:?}", "c", m, self.nodes.get(c).unwrap());
         }
+        println!("sims: {}, avg. depth: {}", sims, depth / sims);
 
         let board = Board::from(root_game);
         root.pick_move(self, &board, &HashMap::<u64, usize>::new(), false)

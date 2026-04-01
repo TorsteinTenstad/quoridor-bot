@@ -9,6 +9,7 @@ use crate::{
 #[derive(Default, Clone, Debug)]
 pub struct Node {
     pub id: u64,
+    pub dist: Option<u8>,
     pub games: usize,
     pub wins: usize,
     pub finished: bool,
@@ -44,10 +45,10 @@ impl Node {
 
         let children = board
             .moves()
-            .map(|m| {
+            .map(|(m, dist)| {
                 let game = execute_move_unchecked(&board.game, &m);
 
-                let hash = ts.add_node(&game);
+                let hash = ts.add_node(&game, Some(dist));
                 (m, hash)
             })
             .collect();
@@ -78,6 +79,7 @@ impl Node {
                 (
                     if explore {
                         child.score(self.games)
+                            - (child.dist.unwrap_or(0) as f64) / 40f64
                             - 1000f64 * (visited.get(hash).cloned().unwrap_or(0) as f64)
                     } else {
                         -child.q()

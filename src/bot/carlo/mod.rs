@@ -5,7 +5,6 @@ mod node;
 
 use crate::{
     bot::Bot,
-    commands::parse_player_move,
     data_model::{Game, PlayerMove},
     session::Session,
 };
@@ -18,7 +17,6 @@ pub struct Carlo {
 #[derive(clap_derive::Subcommand, Debug)]
 pub enum CarloCommand {
     Move,
-    PlaceWall { m: String },
     DebugBoard,
 }
 
@@ -34,18 +32,6 @@ impl Bot for Carlo {
             CarloCommand::Move => session.make_move(self.get_move(&session.game)),
             CarloCommand::DebugBoard => {
                 println!("{:?}", board::Board::from(&session.game))
-            }
-            CarloCommand::PlaceWall { m } => {
-                // if let Some(PlayerMove::PlaceWall {
-                //     orientation,
-                //     position,
-                // }) = parse_player_move(&m)
-                // {
-                //     let mut board = board::Board::from(&session.game);
-                //     println!("{:?}", board);
-                //     board.recalculate_bfs(position.x, position.y, orientation);
-                //     println!("{:?}", board)
-                // }
             }
         }
     }

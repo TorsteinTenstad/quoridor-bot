@@ -129,7 +129,8 @@ impl LPAStar {
     ) {
         for dx in 0..2 {
             for dy in 0..2 {
-                self.update_node(&PiecePosition::new(pos.x + dx, pos.y + dy), goal, walls);
+                let p = PiecePosition::new(pos.x + dx, pos.y + dy);
+                self.update_node(&p, goal, walls);
             }
         }
     }
@@ -140,16 +141,22 @@ impl LPAStar {
     }
     fn compute_shortest_path(&mut self, goal: &PiecePosition, walls: &Walls) {
         loop {
-            let Some((top_key, top_pos)) = self.queue.pop() else {
+            let Some(top_key) = self.queue.peek().map(|x| x.0) else {
                 break;
             };
-            if (top_key >= self.calculate_key(goal, goal))
-                && !self.is_inconsistent(goal)
-                && (0..PIECE_GRID_WIDTH)
-                    .all(|x| !self.is_inconsistent(&PiecePosition::new(x, start_y(self.player))))
-            {
+            let goal_key = self.calculate_key(goal, goal);
+            let goal_inconsistent = self.is_inconsistent(goal);
+
+            let any_start_inconsistent = (0..PIECE_GRID_WIDTH)
+                .any(|x| self.is_inconsistent(&PiecePosition::new(x, start_y(self.player))));
+
+            if !goal_inconsistent && !any_start_inconsistent && top_key >= goal_key {
                 break;
             }
+
+            let Some((_, top_pos)) = self.queue.pop() else {
+                break;
+            };
             let estimates = &mut self.board[top_pos.y][top_pos.x];
             if estimates.g > estimates.rhs {
                 estimates.g = estimates.rhs;
@@ -200,17 +207,38 @@ fn calculate_key_of_estimates(
     Key(k1, k2)
 }
 
-pub fn dump(state: &LPAStar) {
-    for row in &state.board {
-        for cell in row {
+pub fn dump(state: &LPAStar, walls: &Walls) {
+    for (y, row) in state.board.iter().enumerate() {
+        let y = y as isize;
+        for (x, cell) in row.iter().enumerate() {
+            let x = x as isize;
             let f = |n| {
                 if n == u16::MAX {
-                    "--".into()
+                    "xx".into()
                 } else {
                     format!("{:2}", n)
                 }
             };
-            print!("({} {})", f(cell.g), f(cell.rhs));
+            let w = if walls.wall_at(WallOrientation::Vertical, x, y)
+                || walls.wall_at(WallOrientation::Vertical, x, y - 1)
+            {
+                '|'
+            } else {
+                ' '
+            };
+            print!("({} {}){}", f(cell.g), f(cell.rhs), w);
+        }
+        println!();
+        for (x, _cell) in row.iter().enumerate() {
+            let x = x as isize;
+            let w = if walls.wall_at(WallOrientation::Horizontal, x, y)
+                || walls.wall_at(WallOrientation::Horizontal, x - 1, y)
+            {
+                "-------"
+            } else {
+                "       "
+            };
+            print!("{} ", w);
         }
         println!();
     }
@@ -332,5 +360,61 @@ mod tests {
                 .distance_to_goal(&PiecePosition::new(1, 5), &game.board.walls),
             10
         )
+    }
+
+    fn game() -> Game {
+        let mut game = Game::new();
+        game.board.walls.0[0][1] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[2][1] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[1][2] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[3][2] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[5][2] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[7][2] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[3][3] = Some(WallOrientation::Vertical);
+        game.board.walls.0[4][4] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[6][4] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[3][5] = Some(WallOrientation::Vertical);
+        game.board.walls.0[5][5] = Some(WallOrientation::Horizontal);
+        game.board.walls.0[7][5] = Some(WallOrientation::Vertical);
+        game.board.walls.0[6][6] = Some(WallOrientation::Vertical);
+        game.board.walls.0[6][7] = Some(WallOrientation::Horizontal);
+        game.board.player_positions[Player::White.as_index()] = PiecePosition { x: 6, y: 4 };
+        game
+    }
+
+    #[test]
+    #[ntest::timeout(1000)]
+    fn iterative_complex() {
+        let game = game();
+        let mut pathfinding = Pathfinding::new(&game.board);
+        assert_eq!(
+            pathfinding
+                .white
+                .distance_to_goal(game.board.player_position(Player::White), &game.board.walls),
+            6
+        );
+        let m = &PlayerMove::PlaceWall {
+            orientation: WallOrientation::Horizontal,
+            position: WallPosition { x: 7, y: 3 },
+        };
+        let game = execute_move_unchecked(&game, m);
+        let mut pathfinding = pathfinding.clone_with_move(&game.board, m);
+        assert_eq!(
+            pathfinding
+                .white
+                .distance_to_goal(game.board.player_position(Player::White), &game.board.walls),
+            6
+        );
+        let m = &PlayerMove::PlaceWall {
+            orientation: WallOrientation::Horizontal,
+            position: WallPosition { x: 7, y: 6 },
+        };
+        let game = execute_move_unchecked(&game, m);
+        println!("---\n\n\n\n\n\n\n\n\n\n\n\n\n\n---");
+        let mut pathfinding = pathfinding.clone_with_move(&game.board, m);
+        let d = pathfinding
+            .white
+            .distance_to_goal(game.board.player_position(Player::White), &game.board.walls);
+        assert_eq!(d, u16::MAX);
     }
 }

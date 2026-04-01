@@ -68,6 +68,7 @@ fn main() {
         if c.swap(true, Ordering::Relaxed) {
             exit(0);
         }
+        println!("Aborting all automatic play. Ctrl+C again to abort");
     })
     .unwrap();
 
@@ -82,7 +83,6 @@ fn main() {
         let mut session: Session = Session::default();
         loop {
             if ctrl_c.load(Ordering::Relaxed) {
-                println!("Aborting all automatic play. Ctrl+C again to abort");
                 input_type_white = InputType::Manual;
                 input_type_black = InputType::Manual;
             }

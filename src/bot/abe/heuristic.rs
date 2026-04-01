@@ -15,6 +15,7 @@ pub enum Heuristic {
     WallsBehind,
     Forward,
     Basic,
+    DistanceOnly,
 }
 
 impl Heuristic {
@@ -23,6 +24,7 @@ impl Heuristic {
             Heuristic::WallsBehind => walls_behind(game, pathfinding, verbose),
             Heuristic::Forward => forward(game, pathfinding, verbose),
             Heuristic::Basic => basic(game, pathfinding, verbose),
+            Heuristic::DistanceOnly => distance_only(game, pathfinding, verbose),
         }
     }
 }
@@ -130,4 +132,22 @@ fn basic(game: &Game, pathfinding: &mut Pathfinding, _verbose: bool) -> isize {
     let (distance_priority, wall_priority) = (100, wall_value);
 
     distance_priority * distance_score + (wall_priority * wall_score as f32) as isize
+}
+
+fn distance_only(game: &Game, pathfinding: &mut Pathfinding, _verbose: bool) -> isize {
+    let black_distance = pathfinding
+        .black
+        .distance_to_goal(game.board.player_position(Player::Black), &game.board.walls)
+        as isize;
+    if black_distance == 0 {
+        return WHITE_LOSES_BLACK_WINS;
+    }
+    let white_distance = pathfinding
+        .white
+        .distance_to_goal(game.board.player_position(Player::White), &game.board.walls)
+        as isize;
+    if white_distance == 0 {
+        return WHITE_WINS_BLACK_LOSES;
+    }
+    (black_distance - white_distance) * 100
 }
