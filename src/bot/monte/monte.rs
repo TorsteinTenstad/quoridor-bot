@@ -112,6 +112,7 @@ fn run_parallel(
         count_candidates =
             ((count_candidates as f32 * RETAIN_RATIO).ceil() as usize).max(MIN_CANDIDATE_COUNT);
 
+        candidates = (0..count_all).collect();
         candidates.sort_by(|&i, &j| {
             let a = win_counts[i].load(Ordering::Relaxed) as f32
                 / iterations[i].load(Ordering::Relaxed) as f32;
