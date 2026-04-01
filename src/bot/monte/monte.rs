@@ -47,8 +47,8 @@ pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
         })
         .collect();
 
-    let mut indices: Vec<_> = (0..win_rates.len()).collect();
-    indices.sort_by(|&i, &j| win_rates[j].partial_cmp(&win_rates[i]).unwrap());
+    let mut indices: Vec<_> = (0..win_counts.len()).collect();
+    indices.sort_by_key(|i| -win_counts[*i]);
 
     let top_three = indices.clone().into_iter().take(3);
 
@@ -66,7 +66,7 @@ pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
 }
 
 const BATCH_ROUNDS: usize = 10_000;
-const MIN_SPLIT_SIZE: usize = 2;
+const MIN_CANDIDATE_COUNT: usize = 2;
 const RETAIN_RATIO: f32 = 0.5;
 
 fn run_parallel(
@@ -75,13 +75,15 @@ fn run_parallel(
     wall_moves: &[PlayerMove],
     deadline: Instant,
 ) -> (Vec<isize>, Vec<usize>) {
-    let n = legal_moves.len();
-    let win_counts: Vec<AtomicIsize> = (0..n).map(|_| AtomicIsize::new(0)).collect();
+    let count_all = legal_moves.len();
+    let mut count_candidates = count_all;
+
+    let win_counts: Vec<AtomicIsize> = (0..count_all).map(|_| AtomicIsize::new(0)).collect();
     let win_counts = Arc::new(win_counts);
-    let iterations: Vec<AtomicUsize> = (0..n).map(|_| AtomicUsize::new(0)).collect();
+    let iterations: Vec<AtomicUsize> = (0..count_all).map(|_| AtomicUsize::new(0)).collect();
     let iterations = Arc::new(iterations);
 
-    let mut candidates: Vec<usize> = (0..n).collect();
+    let mut candidates: Vec<usize> = (0..count_all).collect();
 
     while Instant::now() < deadline && candidates.len() > 1 {
         let shared_candidates = Arc::new(candidates.clone());
@@ -107,12 +109,20 @@ fn run_parallel(
                 },
             );
 
-        if candidates.len() <= MIN_SPLIT_SIZE {
-            continue;
-        }
-        candidates.sort_by_key(|&i| -win_counts[i].load(Ordering::Relaxed));
-        let retain_count = (candidates.len() as f32 * RETAIN_RATIO).ceil() as usize;
-        candidates.truncate(retain_count.max(1));
+        count_candidates =
+            ((count_candidates as f32 * RETAIN_RATIO).ceil() as usize).max(MIN_CANDIDATE_COUNT);
+
+        candidates.sort_by(|&i, &j| {
+            let a = win_counts[i].load(Ordering::Relaxed) as f32
+                / iterations[i].load(Ordering::Relaxed) as f32;
+
+            let b = win_counts[j].load(Ordering::Relaxed) as f32
+                / iterations[j].load(Ordering::Relaxed) as f32;
+
+            b.partial_cmp(&a).unwrap()
+        });
+
+        candidates.truncate(count_candidates);
     }
 
     (
