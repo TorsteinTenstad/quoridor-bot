@@ -245,12 +245,15 @@ fn simulate(
         if p2_pos.y == p2_target {
             return -1;
         }
-        if wall_moves.len() == 0 {
+
+        let walls_left = game.walls_left[game.player.as_index()];
+        let walls_left_opponent = game.walls_left[game.player.opponent().as_index()];
+
+        if wall_moves.len() == 0 || walls_left + walls_left_opponent == 0 {
             break;
         }
-        let no_walls_left = game.walls_left[game.player.as_index()] == 0;
 
-        let m = if no_walls_left || rng.random_bool(0.8) {
+        let m = if walls_left == 0 || rng.random_bool(0.8) {
             let piece_moves = get_legal_piece_moves(&game, game.player);
             if piece_moves.len() == 0 {
                 return 0;
