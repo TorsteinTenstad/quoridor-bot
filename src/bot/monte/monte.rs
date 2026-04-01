@@ -10,6 +10,8 @@ use arrayvec::ArrayVec;
 use rand::{Rng, seq::IndexedRandom};
 use rand::{SeedableRng, rngs::SmallRng};
 use rayon::prelude::*;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicIsize, Ordering};
 use std::{
     cmp::Reverse,
     collections::{BinaryHeap, HashMap},
@@ -30,7 +32,7 @@ pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
         })
         .collect();
 
-    let (win_count, iterations) = run_parallel(&game, &legal_moves, &wall_moves, deadline);
+    let win_count = run_parallel(&game, &legal_moves, &wall_moves, deadline);
 
     let best_idx = win_count
         .iter()
@@ -39,7 +41,8 @@ pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
         .map(|(i, _)| i)
         .expect("No legal moves");
 
-    println!("{:?} / {:?}", win_count[best_idx], iterations);
+    // println!("{:?} / {:?}", win_count[best_idx], iterations);
+    println!("{:?}", win_count);
     legal_moves[best_idx].clone()
 }
 
@@ -48,29 +51,29 @@ fn run_parallel(
     legal_moves: &[PlayerMove],
     wall_moves: &[PlayerMove],
     deadline: Instant,
-) -> (Vec<isize>, usize) {
-    let mut win_count = vec![0isize; legal_moves.len()];
-    let mut iterations = 0;
+) -> Vec<isize> {
+    let n = legal_moves.len();
+    let win_counts: Vec<AtomicIsize> = (0..n).map(|_| AtomicIsize::new(0)).collect();
+    let win_counts = Arc::new(win_counts);
 
-    while Instant::now() < deadline {
-        // Run one batch in parallel
-        let results: Vec<isize> = legal_moves
-            .par_iter()
-            .map(|m| {
-                let mut rng = SmallRng::from_os_rng();
-                simulate(&game, &mut rng, m.clone(), wall_moves)
-            })
-            .collect();
+    (0..rayon::current_num_threads())
+        .into_par_iter()
+        .for_each_init(
+            || SmallRng::from_os_rng(),
+            |rng, _thread_id| {
+                while Instant::now() < deadline {
+                    for (i, m) in legal_moves.iter().enumerate() {
+                        let r = simulate(game, rng, m.clone(), wall_moves);
+                        win_counts[i].fetch_add(r, Ordering::Relaxed);
+                    }
+                }
+            },
+        );
 
-        // Merge results
-        for (i, val) in results.into_iter().enumerate() {
-            win_count[i] += val;
-        }
-
-        iterations += 1;
-    }
-
-    (win_count, iterations)
+    win_counts
+        .iter()
+        .map(|a| a.load(Ordering::Relaxed))
+        .collect()
 }
 
 fn wall_moves_iter() -> impl Iterator<Item = PlayerMove> {
