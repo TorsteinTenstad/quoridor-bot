@@ -10,7 +10,8 @@ use crate::{
         all_move_piece_moves, execute_move_unchecked, execute_move_unchecked_inplace,
         is_move_legal, is_move_piece_legal, room_for_wall_placement,
     },
-    l_p_a_star::Pathfinding,
+    l_p_a_star::{Pathfinding, dump},
+    render_board::render_board,
     session::Session,
     square_outline_iterator::SquareOutlineIterator,
 };
@@ -46,7 +47,7 @@ impl Abe {
             self.default_heuristic = heuristic;
         }
         self.update_game_state(Game::new());
-        for _i in 0..args.threads {
+        for _i in 0..args.abe_background_threads {
             let game_state = Arc::clone(&self.game_state);
             let cache = self.cache.clone();
             let heuristic = self.default_heuristic;
@@ -62,6 +63,9 @@ impl Abe {
         for flag in &self.flags {
             flag.store(true, Ordering::Release);
         }
+    }
+    pub fn clear_cache(&mut self) {
+        self.cache.transposition_table.lock().unwrap().clear();
     }
 }
 
@@ -262,7 +266,7 @@ impl Bot for Abe {
                 );
                 println!("{:?}:{}", heuristic, val);
             }
-            AbeCommand::ClearCache => self.cache = Cache::default(),
+            AbeCommand::ClearCache => self.clear_cache(),
         }
     }
 }
@@ -423,9 +427,9 @@ where
                 .chain(moves_ordered_by_heuristic_quality(game))
             {
                 let child_game_state = execute_move_unchecked(game, &player_move);
-                let mut pathfinding =
+                let mut next_pathfinding =
                     pathfinding.clone_with_move(&child_game_state.board, &player_move);
-                if pathfinding.any_blocked(&child_game_state.board) {
+                if next_pathfinding.any_blocked(&child_game_state.board) {
                     continue;
                 }
                 let (score, moves) = match alpha_beta(
@@ -441,7 +445,7 @@ where
                     stop,
                     heuristic,
                     cache,
-                    &mut pathfinding,
+                    &mut next_pathfinding,
                 ) {
                     AlphaBetaResult::Moves(eval) => (eval.score, eval.best_moves),
                     AlphaBetaResult::Stopped => {
@@ -481,9 +485,9 @@ where
                 .chain(moves_ordered_by_heuristic_quality(game))
             {
                 let child_game_state = execute_move_unchecked(game, &player_move);
-                let mut pathfinding =
+                let mut next_pathfinding =
                     pathfinding.clone_with_move(&child_game_state.board, &player_move);
-                if pathfinding.any_blocked(&child_game_state.board) {
+                if next_pathfinding.any_blocked(&child_game_state.board) {
                     continue;
                 }
                 let (score, moves) = match alpha_beta(
@@ -499,7 +503,7 @@ where
                     stop,
                     heuristic,
                     cache,
-                    &mut pathfinding,
+                    &mut next_pathfinding,
                 ) {
                     AlphaBetaResult::Moves(eval) => (eval.score, eval.best_moves),
                     AlphaBetaResult::Stopped => {
