@@ -82,7 +82,7 @@ impl Node {
                             - (child.dist.unwrap_or(0) as f64) / 40f64
                             - 1000f64 * (visited.get(hash).cloned().unwrap_or(0) as f64)
                     } else {
-                        -child.q()
+                        -child.q() - (child.dist.unwrap_or(0) as f64) / 40f64
                     },
                     m,
                     hash,
