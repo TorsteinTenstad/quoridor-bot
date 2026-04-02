@@ -1,73 +1,62 @@
 use crate::{
-    bot::dedi::walls::{Dir, get_board, get_wall_moves, wall_blocks, wall_collide},
-    data_model::{
-        Board, Game, MovePiece, PIECE_GRID_HEIGHT, PiecePosition, Player, PlayerMove,
-        WALL_GRID_HEIGHT, WALL_GRID_WIDTH, WallOrientation, WallPosition, Walls,
+    bot::dedi::walls::{
+        Board, Dir, Tile, board_after_wall_inplace, get_board, get_wall_moves, wall_blocks,
     },
-    game_logic::execute_move_unchecked_inplace,
+    data_model::{Game, MovePiece, PIECE_GRID_HEIGHT, PiecePosition, Player, PlayerMove, Walls},
+    game_logic::{execute_move_unchecked_inplace, new_position_after_move_piece_unchecked},
 };
 use arrayvec::ArrayVec;
-use rand::{Rng, seq::SliceRandom};
-use rand::{SeedableRng, rngs::SmallRng};
+use rand::{Rng, rngs::ThreadRng, seq::SliceRandom};
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicIsize, Ordering};
-use std::sync::{Arc, atomic::AtomicUsize};
+use std::time::{Duration, Instant};
 use std::{
-    cmp::Reverse,
-    collections::{BinaryHeap, HashMap},
-    time::{Duration, Instant},
+    sync::{Arc, atomic::AtomicUsize},
+    usize,
 };
 
 const BATCH_ROUNDS: usize = 1_000;
 const MIN_CANDIDATE_COUNT: usize = 2;
-const RETAIN_RATIO: f32 = 0.8;
+const RETAIN_RATIO: f32 = 0.5;
 const PIECE_PROBABILITY: f64 = 0.8;
 const MAX_DEPTH: usize = 64;
 
 pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
     let deadline = Instant::now() + duration;
 
-    let legal_moves: ArrayVec<_, 136> = get_legal_moves(game).collect();
-    let wall_moves: ArrayVec<_, 128> = wall_moves_iter()
-        .filter(|m| match m {
-            PlayerMove::MovePiece(_) => false,
-            PlayerMove::PlaceWall {
-                orientation,
-                position,
-            } => !wall_collide(&game.board.walls, orientation.clone(), position),
-        })
-        .collect();
+    let mut rng = rand::rng();
+    let mut legal_moves: ArrayVec<_, 136> = get_legal_moves(game).collect();
+    legal_moves.shuffle(&mut rng);
+    let mut wall_moves: ArrayVec<_, 128> = get_legal_wall_moves(game).collect();
+    wall_moves.shuffle(&mut rng);
 
-    let (win_counts, iterations) = run_parallel(game, &legal_moves, &wall_moves, deadline);
+    let evaluations = run_parallel(game, &legal_moves, &wall_moves, deadline);
 
-    let win_rates: Vec<f32> = win_counts
-        .iter()
-        .zip(iterations.iter())
-        .map(|(&wins, &iters)| {
-            if iters == 0 {
-                0.0
-            } else {
-                wins as f32 / iters as f32
-            }
-        })
-        .collect();
-
-    let mut indices: Vec<_> = (0..win_counts.len()).collect();
-    indices.sort_by_key(|i| -win_counts[*i]);
-
-    let top_three = indices.clone().into_iter().take(3);
-
-    for idx in top_three {
+    let best_idx = evaluations.first().unwrap().move_index;
+    for eval in evaluations.iter().take(10) {
         println!(
-            "{:.1} % ({:?}): {:?}",
-            win_rates[idx] * 100.0,
-            iterations[idx],
-            legal_moves[idx],
+            "{:.1} % ({:?}/{:?}/{:?}): {:?}",
+            if eval.iterations > 0 {
+                100.0 * eval.win_count as f32 / eval.iterations as f32
+            } else {
+                0.0
+            },
+            eval.win_count,
+            eval.iterations,
+            eval.attempts,
+            legal_moves[eval.move_index],
         );
     }
+    println!("");
 
-    let best_idx = *indices.first().unwrap();
     legal_moves[best_idx].clone()
+}
+
+pub struct Evaluation {
+    move_index: usize,
+    win_count: isize,
+    iterations: usize,
+    attempts: usize,
 }
 
 fn run_parallel(
@@ -75,39 +64,63 @@ fn run_parallel(
     legal_moves: &[PlayerMove],
     wall_moves: &[PlayerMove],
     deadline: Instant,
-) -> (Vec<isize>, Vec<usize>) {
+) -> Vec<Evaluation> {
     let count_all = legal_moves.len();
     let mut count_candidates = count_all;
+
+    if count_all == 1 {
+        return vec![Evaluation {
+            move_index: 0,
+            win_count: 0,
+            iterations: 0,
+            attempts: 0,
+        }];
+    }
 
     let win_counts: Vec<AtomicIsize> = (0..count_all).map(|_| AtomicIsize::new(0)).collect();
     let win_counts = Arc::new(win_counts);
     let iterations: Vec<AtomicUsize> = (0..count_all).map(|_| AtomicUsize::new(0)).collect();
     let iterations = Arc::new(iterations);
+    let attempts: Vec<AtomicUsize> = (0..count_all).map(|_| AtomicUsize::new(0)).collect();
+    let attempts = Arc::new(attempts);
 
     let mut candidates: Vec<usize> = (0..count_all).collect();
 
-    while Instant::now() < deadline && candidates.len() > 1 {
+    let board_p1 = get_board(game, game.player);
+    let board_p2 = get_board(game, game.player.opponent());
+
+    loop {
         let shared_candidates = Arc::new(candidates.clone());
         let win_counts_ref = win_counts.clone();
         let iterations_ref = iterations.clone();
+        let attempts_ref = attempts.clone();
 
         (0..rayon::current_num_threads())
             .into_par_iter()
             .for_each_init(
-                || (SmallRng::from_os_rng(), vec![(0isize, 0usize); count_all]),
+                || (rand::rng(), vec![(0isize, 0usize, 0usize); count_all]),
                 |(rng, local), _| {
                     for _ in 0..BATCH_ROUNDS {
                         for &i in shared_candidates.iter() {
-                            if let Some(r) = simulate(game, rng, &legal_moves[i], wall_moves) {
+                            if let Some(r) = simulate(
+                                game,
+                                rng,
+                                &legal_moves[i],
+                                wall_moves,
+                                &board_p1,
+                                &board_p2,
+                            ) {
                                 local[i].0 += r;
                                 local[i].1 += 1;
                             }
+                            local[i].2 += 1;
                         }
                     }
 
-                    for (i, (w, it)) in local.iter().enumerate() {
-                        win_counts_ref[i].fetch_add(*w, Ordering::Relaxed);
-                        iterations_ref[i].fetch_add(*it, Ordering::Relaxed);
+                    for (i, (wins, iter, attem)) in local.iter().enumerate() {
+                        win_counts_ref[i].fetch_add(*wins, Ordering::Relaxed);
+                        iterations_ref[i].fetch_add(*iter, Ordering::Relaxed);
+                        attempts_ref[i].fetch_add(*attem, Ordering::Relaxed);
                     }
                 },
             );
@@ -117,56 +130,61 @@ fn run_parallel(
 
         candidates = (0..count_all).collect();
         candidates.sort_by(|&i, &j| {
-            let iter_i = iterations[i].load(Ordering::Relaxed);
-            let iter_j = iterations[j].load(Ordering::Relaxed);
-            let a = if iter_i == 0 {
+            let a_iter = iterations[i].load(Ordering::Relaxed);
+            let b_iter = iterations[j].load(Ordering::Relaxed);
+            let a = if a_iter == 0 {
                 0.0
             } else {
-                win_counts[i].load(Ordering::Relaxed) as f32 / iter_i as f32
+                win_counts[i].load(Ordering::Relaxed) as f32 / a_iter as f32
             };
-            let b = if iter_j == 0 {
+            let b = if b_iter == 0 {
                 0.0
             } else {
-                win_counts[j].load(Ordering::Relaxed) as f32 / iter_j as f32
+                win_counts[j].load(Ordering::Relaxed) as f32 / b_iter as f32
             };
-            b.partial_cmp(&a).unwrap_or(std::cmp::Ordering::Equal)
+            if a == b {
+                let a_attem = attempts[i].load(Ordering::Relaxed);
+                let b_attem = attempts[j].load(Ordering::Relaxed);
+                let a = if a_attem == 0 {
+                    0.0
+                } else {
+                    a as f32 / a_attem as f32
+                };
+                let b = if b_attem == 0 {
+                    0.0
+                } else {
+                    b as f32 / b_attem as f32
+                };
+                b.partial_cmp(&a).unwrap_or(std::cmp::Ordering::Equal)
+            } else {
+                b.partial_cmp(&a).unwrap_or(std::cmp::Ordering::Equal)
+            }
         });
+
+        if Instant::now() >= deadline {
+            return candidates
+                .iter()
+                .map(|i| Evaluation {
+                    move_index: *i,
+                    win_count: win_counts[*i].load(Ordering::Relaxed),
+                    iterations: iterations[*i].load(Ordering::Relaxed),
+                    attempts: attempts[*i].load(Ordering::Relaxed),
+                })
+                .collect();
+        }
 
         candidates.truncate(count_candidates);
     }
-
-    (
-        win_counts
-            .iter()
-            .map(|a| a.load(Ordering::Relaxed))
-            .collect(),
-        iterations
-            .iter()
-            .map(|a| a.load(Ordering::Relaxed))
-            .collect(),
-    )
-}
-
-fn wall_moves_iter() -> impl Iterator<Item = PlayerMove> {
-    [WallOrientation::Horizontal, WallOrientation::Vertical]
-        .into_iter()
-        .flat_map(|orientation| {
-            (0..WALL_GRID_HEIGHT).flat_map(move |y| {
-                (0..WALL_GRID_WIDTH).map(move |x| PlayerMove::PlaceWall {
-                    orientation,
-                    position: WallPosition { x, y },
-                })
-            })
-        })
 }
 
 fn get_legal_moves(game: &Game) -> impl Iterator<Item = PlayerMove> {
     get_legal_piece_moves(game, game.player)
         .into_iter()
+        .map(PlayerMove::MovePiece)
         .chain(get_legal_wall_moves(game))
 }
 
-pub fn get_legal_piece_moves(game: &Game, player: Player) -> ArrayVec<PlayerMove, 8> {
+pub fn get_legal_piece_moves(game: &Game, player: Player) -> ArrayVec<MovePiece, 8> {
     let p1 = game.board.player_position(player);
     let p2 = game.board.player_position(player.opponent());
     get_legal_piece_moves_from_positions(&game.board.walls, p1, p2)
@@ -176,10 +194,10 @@ pub fn get_legal_piece_moves_from_positions(
     walls: &Walls,
     p1: &PiecePosition,
     p2: &PiecePosition,
-) -> ArrayVec<PlayerMove, 8> {
+) -> ArrayVec<MovePiece, 8> {
     let p1 = (p1.x, p1.y);
     let p2 = (p2.x, p2.y);
-    let mut moves: ArrayVec<PlayerMove, 8> = ArrayVec::new();
+    let mut moves: ArrayVec<MovePiece, 8> = ArrayVec::new();
 
     let allow = |xy: (usize, usize), dir: Dir| {
         dir.can_apply(xy) && !wall_blocks(walls, xy.0 as isize, xy.1 as isize, dir)
@@ -194,26 +212,26 @@ pub fn get_legal_piece_moves_from_positions(
 
         if x == p2.0 && y == p2.1 {
             if allow(p2, dir) {
-                moves.push(PlayerMove::MovePiece(MovePiece {
+                moves.push(MovePiece {
                     direction: direction,
                     direction_on_collision: direction,
-                }));
+                });
             } else {
                 let (left, right) = dir.orthogonal();
                 for _dir in [left, right] {
                     if allow(p2, _dir) {
-                        moves.push(PlayerMove::MovePiece(MovePiece {
+                        moves.push(MovePiece {
                             direction: direction,
                             direction_on_collision: _dir.to_direction(),
-                        }));
+                        });
                     }
                 }
             }
         } else {
-            moves.push(PlayerMove::MovePiece(MovePiece {
+            moves.push(MovePiece {
                 direction: direction,
                 direction_on_collision: direction,
-            }));
+            });
         }
     }
 
@@ -270,15 +288,20 @@ fn get_legal_wall_moves(game: &Game) -> impl Iterator<Item = PlayerMove> {
 
 fn simulate(
     game: &Game,
-    rng: &mut SmallRng,
+    rng: &mut ThreadRng,
     move_initial: &PlayerMove,
     wall_moves: &[PlayerMove],
+    _board_a: &Board,
+    _board_b: &Board,
 ) -> Option<isize> {
-    let p1 = game.player;
-    let p2 = game.player.opponent();
-    let p1_target = target(p1);
-    let p2_target = target(p2);
+    let p_a = game.player;
+    let p_b = game.player.opponent();
+    let target_a = target(p_a);
+    let target_b = target(p_b);
+
     let mut game = game.clone();
+    let mut board_a = _board_a.clone();
+    let mut board_b = _board_b.clone();
 
     let mut wall_move_indices: ArrayVec<usize, 128> = (0..wall_moves.len()).collect();
     wall_move_indices.shuffle(rng);
@@ -287,31 +310,63 @@ fn simulate(
 
     execute_move_unchecked_inplace(&mut game, &move_initial);
 
-    for _ in 1..MAX_DEPTH {
-        let p1_pos = game.board.player_position(p1);
-        if p1_pos.y == p1_target {
+    if let PlayerMove::PlaceWall {
+        orientation,
+        position,
+    } = move_initial
+    {
+        board_after_wall_inplace(&game, &mut board_a, position.x, position.y, &orientation);
+        board_after_wall_inplace(&game, &mut board_b, position.x, position.y, &orientation);
+    }
+
+    for _ in 0..MAX_DEPTH {
+        let pos_a = game.board.player_position(p_a).clone();
+        if pos_a.y == target_a {
             return Some(1);
         }
-        let p2_pos = game.board.player_position(p2);
-        if p2_pos.y == p2_target {
+        let pos_b = game.board.player_position(p_b).clone();
+        if pos_b.y == target_b {
             return Some(-1);
         }
 
-        let walls_left = game.walls_left[game.player.as_index()];
-        let walls_left_opponent = game.walls_left[game.player.opponent().as_index()];
+        let p_i = game.player;
+        let p_j = game.player.opponent();
+        let walls_i = game.walls_left[p_i.as_index()];
+        let walls_j = game.walls_left[p_j.as_index()];
 
-        if wall_move_idx_idx >= wall_move_count || walls_left + walls_left_opponent == 0 {
+        if wall_move_idx_idx >= wall_move_count || walls_i + walls_j == 0 {
             break;
         }
 
-        let m = if walls_left == 0 || rng.random_bool(PIECE_PROBABILITY) {
+        let m = if walls_i == 0 || rng.random_bool(PIECE_PROBABILITY) {
             let piece_moves = get_legal_piece_moves(&game, game.player);
             if piece_moves.len() == 0 {
                 return None;
             }
 
-            let idx = rng.random_range(0..piece_moves.len());
-            piece_moves[idx].clone()
+            let mut idx = rng.random_range(0..piece_moves.len());
+            let board = if p_i == p_a { &board_a } else { &board_b };
+
+            let pos_i = game.board.player_position(p_i);
+            let pos_j = game.board.player_position(p_j);
+            let distance_now = match board.tiles[pos_i.y][pos_i.x] {
+                Tile::Valid(_, dis) => dis,
+                _ => unreachable!(),
+            };
+
+            for _ in 0..piece_moves.len() {
+                let dest = new_position_after_move_piece_unchecked(pos_i, &piece_moves[idx], pos_j);
+                let distance_next = match board.tiles[dest.y][dest.x] {
+                    Tile::Valid(_, dis) => dis,
+                    _ => unreachable!(),
+                };
+                if distance_next >= distance_now {
+                    idx = rng.random_range(0..piece_moves.len());
+                    // idx = (idx + 1) % piece_moves.len();
+                }
+            }
+
+            PlayerMove::MovePiece(piece_moves[idx].clone())
         } else {
             let idx = wall_move_indices[wall_move_idx_idx];
             wall_move_idx_idx += 1;
@@ -319,20 +374,63 @@ fn simulate(
         };
 
         execute_move_unchecked_inplace(&mut game, &m);
+
+        if let PlayerMove::PlaceWall {
+            orientation,
+            position,
+        } = m
+        {
+            board_after_wall_inplace(&game, &mut board_a, position.x, position.y, &orientation);
+            board_after_wall_inplace(&game, &mut board_b, position.x, position.y, &orientation);
+
+            let pos_a = game.board.player_position(p_a).clone();
+            let pos_b = game.board.player_position(p_b).clone();
+
+            match board_a.tiles[pos_a.y][pos_a.x] {
+                Tile::Invalid => return None,
+                _ => {}
+            }
+            match board_b.tiles[pos_b.y][pos_b.x] {
+                Tile::Invalid => return None,
+                _ => {}
+            }
+        }
     }
 
-    if wall_move_idx_idx < wall_move_count {
-        return None;
+    let pos_a = game.board.player_position(p_a);
+    let dis_a = match board_a.tiles[pos_a.y][pos_a.x] {
+        Tile::Valid(_, dis) => dis,
+        _ => unreachable!(),
+    };
+    let pos_b = game.board.player_position(p_b);
+    let dis_b = match board_b.tiles[pos_b.y][pos_b.x] {
+        Tile::Valid(_, dis) => dis,
+        _ => unreachable!(),
+    };
+
+    let walls_a = game.walls_left[p_a.as_index()];
+    let walls_b = game.walls_left[p_b.as_index()];
+
+    if walls_b == 0 && dis_a < dis_b {
+        return Some(1);
     }
 
-    let a = a_star_distance(&game.board, game.player);
-    let b = a_star_distance(&game.board, game.player.opponent());
-
-    if a <= b {
-        if game.player == p1 { Some(1) } else { Some(-1) }
-    } else {
-        if game.player == p1 { Some(-1) } else { Some(1) }
+    if walls_a == 0 && dis_a > dis_b {
+        return Some(-1);
     }
+
+    if walls_a <= walls_b && dis_a > dis_b {
+        return Some(-1);
+    }
+
+    return None;
+
+    // let win_prob = dis_b as f64 / (dis_a as f64 + dis_b as f64);
+    // if rng.random_bool(win_prob) {
+    //     Some(1)
+    // } else {
+    //     Some(-1)
+    // }
 }
 
 fn target(player: Player) -> usize {
@@ -340,52 +438,5 @@ fn target(player: Player) -> usize {
         PIECE_GRID_HEIGHT - 1
     } else {
         0
-    }
-}
-
-pub fn a_star_distance(board: &Board, player: Player) -> Option<usize> {
-    let start = board.player_position(player).clone();
-    let start = (start.x, start.y);
-    let goal_h = heuristic(&start, player);
-
-    let mut open_set = BinaryHeap::new();
-    open_set.push((Reverse(goal_h), start.clone()));
-
-    let mut g_score = HashMap::<(usize, usize), usize>::new();
-    g_score.insert(start, 0);
-
-    let opponent_position = board.player_position(player.opponent());
-    let opponent_position = (opponent_position.x, opponent_position.y);
-
-    while let Some((Reverse(_), current)) = open_set.pop() {
-        let h = heuristic(&current, player);
-
-        if h == 0 {
-            return Some(g_score[&current]);
-        }
-
-        let current_g = g_score[&current];
-
-        let _neighbors = get_legal_destinations(&board.walls, current.clone(), opponent_position);
-
-        for neighbor in _neighbors {
-            let tentative_g = current_g + 1;
-
-            if tentative_g < *g_score.get(&neighbor).unwrap_or(&usize::MAX) {
-                g_score.insert(neighbor.clone(), tentative_g);
-
-                let f = tentative_g + heuristic(&neighbor, player);
-                open_set.push((Reverse(f), neighbor));
-            }
-        }
-    }
-
-    None
-}
-
-pub fn heuristic(pos: &(usize, usize), player: Player) -> usize {
-    match player {
-        Player::White => PIECE_GRID_HEIGHT - 1 - pos.1,
-        Player::Black => pos.1,
     }
 }

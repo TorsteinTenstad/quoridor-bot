@@ -6,6 +6,8 @@ use arraydeque::ArrayDeque;
 use arrayvec::ArrayVec;
 use std::fmt::Debug;
 
+pub const BFS_QUEUE_SIZE: usize = 81;
+
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Dir {
     None,
@@ -109,7 +111,7 @@ pub fn get_board(game: &Game, player: Player) -> Board {
         tiles: [[Tile::Invalid; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
     };
 
-    let mut queue: ArrayDeque<(usize, usize), 81> = ArrayDeque::new();
+    let mut queue: ArrayDeque<(usize, usize), BFS_QUEUE_SIZE> = ArrayDeque::new();
 
     let y_target = match player {
         Player::Black => 0,
@@ -125,14 +127,12 @@ pub fn get_board(game: &Game, player: Player) -> Board {
     board
 }
 
-fn bfs(walls: &Walls, board: &mut Board, mut queue: ArrayDeque<(usize, usize), 81>) {
+fn bfs(walls: &Walls, board: &mut Board, mut queue: ArrayDeque<(usize, usize), BFS_QUEUE_SIZE>) {
     while let Some(xy) = queue.pop_front() {
         let from = board.tiles[xy.1][xy.0];
 
         let distance = match from {
-            Tile::Invalid => {
-                unreachable!()
-            }
+            Tile::Invalid => unreachable!(),
             Tile::Valid(_, d) => d + 1,
         };
 
@@ -155,7 +155,7 @@ fn bfs(walls: &Walls, board: &mut Board, mut queue: ArrayDeque<(usize, usize), 8
             }
 
             board.tiles[y][x] = Tile::Valid(dir.reverse(), distance);
-            let _ = queue.push_back((x, y));
+            queue.push_back((x, y)).expect("queue is full");
         }
     }
 }
@@ -246,7 +246,7 @@ pub fn get_wall_moves(
                     continue;
                 }
 
-                let board_p1_new = board_after_wall(&mut game, &board_p1, x, y, orientation);
+                let board_p1_new = board_after_wall(&mut game, &board_p1, x, y, &orientation);
                 match board_p1_new.tiles[pos1.y][pos1.x] {
                     Tile::Invalid => {
                         continue;
@@ -254,7 +254,7 @@ pub fn get_wall_moves(
                     _ => {}
                 }
 
-                let board_p2_new = board_after_wall(&mut game, &board_p2, x, y, orientation);
+                let board_p2_new = board_after_wall(&mut game, &board_p2, x, y, &orientation);
                 match board_p2_new.tiles[pos2.y][pos2.x] {
                     Tile::Invalid => {
                         continue;
@@ -279,7 +279,7 @@ pub fn get_wall_moves(
 
 fn board_propagate_invalid(
     board: &mut Board,
-    collect: &mut ArrayVec<(usize, usize), 81>,
+    collect: &mut ArrayVec<(usize, usize), BFS_QUEUE_SIZE>,
     x: usize,
     y: usize,
 ) {
@@ -290,12 +290,12 @@ fn board_propagate_invalid(
         if !dir_out.can_apply((x, y)) {
             continue;
         }
-        let (x, y) = dir_out.apply((x, y));
+        let (_x, _y) = dir_out.apply((x, y));
 
-        match board.tiles[y][x] {
+        match board.tiles[_y][_x] {
             Tile::Valid(dir_in, _) => {
                 if dir_in == dir_out.reverse() {
-                    board_propagate_invalid(board, collect, x, y);
+                    board_propagate_invalid(board, collect, _x, _y);
                 }
             }
             _ => {}
@@ -410,11 +410,27 @@ fn board_after_wall(
     board: &Board,
     x: usize,
     y: usize,
-    orientation: WallOrientation,
+    orientation: &WallOrientation,
 ) -> Board {
     let mut board = board.clone();
+    let orientation = orientation.clone();
+
     game.board.walls.0[x][y] = Some(orientation);
 
+    board_after_wall_inplace(game, &mut board, x, y, &orientation);
+
+    game.board.walls.0[x][y] = None;
+
+    board
+}
+
+pub fn board_after_wall_inplace(
+    game: &Game,
+    board: &mut Board,
+    x: usize,
+    y: usize,
+    orientation: &WallOrientation,
+) {
     let candidates = [(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)]
         .into_iter()
         .zip(match orientation {
@@ -422,54 +438,54 @@ fn board_after_wall(
             WallOrientation::Vertical => [Dir::PosX, Dir::NegX, Dir::PosX, Dir::NegX],
         });
 
-    let mut invalids: ArrayVec<(usize, usize), 81> = ArrayVec::new();
+    let mut invalids: ArrayVec<(usize, usize), BFS_QUEUE_SIZE> = ArrayVec::new();
     for ((x, y), towards_wall) in candidates {
         match board.tiles[y][x] {
             Tile::Valid(dir, _) => {
                 if dir == towards_wall {
-                    board_propagate_invalid(&mut board, &mut invalids, x, y);
+                    board_propagate_invalid(board, &mut invalids, x, y);
                 }
             }
-            _ => {}
+            _ => {
+                invalids.push((x, y));
+            }
         }
     }
 
-    {
-        let mut queue: ArrayDeque<(usize, usize), 81> = ArrayDeque::new();
-        let mut seen = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
-
-        for invalid in invalids {
-            for dir in [Dir::PosX, Dir::PosY, Dir::NegX, Dir::NegY] {
-                if !dir.can_apply(invalid) {
-                    continue;
-                }
-                if wall_blocks(
-                    &game.board.walls,
-                    invalid.0 as isize,
-                    invalid.1 as isize,
-                    dir,
-                ) {
-                    continue;
-                }
-                let (x, y) = dir.apply(invalid);
-
-                if seen[y][x] {
-                    continue;
-                }
-                seen[y][x] = true;
-
-                match board.tiles[y][x] {
-                    Tile::Valid(_, _) => {
-                        let _ = queue.push_back((x, y));
-                    }
-                    _ => {}
-                };
-            }
-        }
-
-        bfs(&game.board.walls, &mut board, queue);
+    if invalids.len() == 0 {
+        return;
     }
-    game.board.walls.0[x][y] = None;
+    let mut queue: ArrayDeque<(usize, usize), BFS_QUEUE_SIZE> = ArrayDeque::new();
+    let mut seen = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
 
-    board
+    for invalid in invalids {
+        for dir in [Dir::PosX, Dir::PosY, Dir::NegX, Dir::NegY] {
+            if !dir.can_apply(invalid) {
+                continue;
+            }
+            if wall_blocks(
+                &game.board.walls,
+                invalid.0 as isize,
+                invalid.1 as isize,
+                dir,
+            ) {
+                continue;
+            }
+            let (x, y) = dir.apply(invalid);
+
+            if seen[y][x] {
+                continue;
+            }
+            seen[y][x] = true;
+
+            match board.tiles[y][x] {
+                Tile::Valid(_, _) => {
+                    let _ = queue.push_back((x, y));
+                }
+                _ => {}
+            };
+        }
+    }
+
+    bfs(&game.board.walls, board, queue);
 }
