@@ -1,7 +1,9 @@
 use crate::{
-    bot::dedi::walls::{Dir, get_board, get_wall_moves, wall_blocks},
+    bot::dedi::walls::{
+        Board, Dir, Tile, board_after_wall_inplace, get_board, get_wall_moves, wall_blocks,
+    },
     data_model::{Game, MovePiece, PIECE_GRID_HEIGHT, PiecePosition, Player, PlayerMove, Walls},
-    game_logic::execute_move_unchecked_inplace,
+    game_logic::{execute_move_unchecked_inplace, new_position_after_move_piece_unchecked},
 };
 use arrayvec::ArrayVec;
 use rand::{Rng, rngs::ThreadRng, seq::SliceRandom};
@@ -84,6 +86,9 @@ fn run_parallel(
 
     let mut candidates: Vec<usize> = (0..count_all).collect();
 
+    let board_p1 = get_board(game, game.player);
+    let board_p2 = get_board(game, game.player.opponent());
+
     loop {
         let shared_candidates = Arc::new(candidates.clone());
         let win_counts_ref = win_counts.clone();
@@ -97,7 +102,14 @@ fn run_parallel(
                 |(rng, local), _| {
                     for _ in 0..BATCH_ROUNDS {
                         for &i in shared_candidates.iter() {
-                            if let Some(r) = simulate(game, rng, &legal_moves[i], wall_moves) {
+                            if let Some(r) = simulate(
+                                game,
+                                rng,
+                                &legal_moves[i],
+                                wall_moves,
+                                &board_p1,
+                                &board_p2,
+                            ) {
                                 local[i].0 += r;
                                 local[i].1 += 1;
                             }
@@ -279,6 +291,8 @@ fn simulate(
     rng: &mut ThreadRng,
     move_initial: &PlayerMove,
     wall_moves: &[PlayerMove],
+    _board_a: &Board,
+    _board_b: &Board,
 ) -> Option<isize> {
     let p_a = game.player;
     let p_b = game.player.opponent();
@@ -286,6 +300,8 @@ fn simulate(
     let target_b = target(p_b);
 
     let mut game = game.clone();
+    let mut board_a = _board_a.clone();
+    let mut board_b = _board_b.clone();
 
     let mut wall_move_indices: ArrayVec<usize, 128> = (0..wall_moves.len()).collect();
     wall_move_indices.shuffle(rng);
@@ -293,6 +309,15 @@ fn simulate(
     let mut wall_move_idx_idx = 0;
 
     execute_move_unchecked_inplace(&mut game, &move_initial);
+
+    if let PlayerMove::PlaceWall {
+        orientation,
+        position,
+    } = move_initial
+    {
+        board_after_wall_inplace(&game, &mut board_a, position.x, position.y, &orientation);
+        board_after_wall_inplace(&game, &mut board_b, position.x, position.y, &orientation);
+    }
 
     for _ in 0..MAX_DEPTH {
         let pos_a = game.board.player_position(p_a).clone();
@@ -305,18 +330,42 @@ fn simulate(
         }
 
         let p_i = game.player;
+        let p_j = game.player.opponent();
         let walls_i = game.walls_left[p_i.as_index()];
+        let walls_j = game.walls_left[p_j.as_index()];
 
-        let m = if walls_i == 0
-            || wall_move_idx_idx >= wall_move_count
-            || rng.random_bool(PIECE_PROBABILITY)
-        {
+        if wall_move_idx_idx >= wall_move_count || walls_i + walls_j == 0 {
+            break;
+        }
+
+        let m = if walls_i == 0 || rng.random_bool(PIECE_PROBABILITY) {
             let piece_moves = get_legal_piece_moves(&game, game.player);
             if piece_moves.len() == 0 {
                 return None;
             }
 
-            let idx = rng.random_range(0..piece_moves.len());
+            let mut idx = rng.random_range(0..piece_moves.len());
+            let board = if p_i == p_a { &board_a } else { &board_b };
+
+            let pos_i = game.board.player_position(p_i);
+            let pos_j = game.board.player_position(p_j);
+            let distance_now = match board.tiles[pos_i.y][pos_i.x] {
+                Tile::Valid(_, dis) => dis,
+                _ => unreachable!(),
+            };
+
+            for _ in 0..piece_moves.len() {
+                let dest = new_position_after_move_piece_unchecked(pos_i, &piece_moves[idx], pos_j);
+                let distance_next = match board.tiles[dest.y][dest.x] {
+                    Tile::Valid(_, dis) => dis,
+                    _ => unreachable!(),
+                };
+                if distance_next >= distance_now {
+                    idx = rng.random_range(0..piece_moves.len());
+                    // idx = (idx + 1) % piece_moves.len();
+                }
+            }
+
             PlayerMove::MovePiece(piece_moves[idx].clone())
         } else {
             let idx = wall_move_indices[wall_move_idx_idx];
@@ -325,9 +374,63 @@ fn simulate(
         };
 
         execute_move_unchecked_inplace(&mut game, &m);
+
+        if let PlayerMove::PlaceWall {
+            orientation,
+            position,
+        } = m
+        {
+            board_after_wall_inplace(&game, &mut board_a, position.x, position.y, &orientation);
+            board_after_wall_inplace(&game, &mut board_b, position.x, position.y, &orientation);
+
+            let pos_a = game.board.player_position(p_a).clone();
+            let pos_b = game.board.player_position(p_b).clone();
+
+            match board_a.tiles[pos_a.y][pos_a.x] {
+                Tile::Invalid => return None,
+                _ => {}
+            }
+            match board_b.tiles[pos_b.y][pos_b.x] {
+                Tile::Invalid => return None,
+                _ => {}
+            }
+        }
+    }
+
+    let pos_a = game.board.player_position(p_a);
+    let dis_a = match board_a.tiles[pos_a.y][pos_a.x] {
+        Tile::Valid(_, dis) => dis,
+        _ => unreachable!(),
+    };
+    let pos_b = game.board.player_position(p_b);
+    let dis_b = match board_b.tiles[pos_b.y][pos_b.x] {
+        Tile::Valid(_, dis) => dis,
+        _ => unreachable!(),
+    };
+
+    let walls_a = game.walls_left[p_a.as_index()];
+    let walls_b = game.walls_left[p_b.as_index()];
+
+    if walls_b == 0 && dis_a < dis_b {
+        return Some(1);
+    }
+
+    if walls_a == 0 && dis_a > dis_b {
+        return Some(-1);
+    }
+
+    if walls_a <= walls_b && dis_a > dis_b {
+        return Some(-1);
     }
 
     return None;
+
+    // let win_prob = dis_b as f64 / (dis_a as f64 + dis_b as f64);
+    // if rng.random_bool(win_prob) {
+    //     Some(1)
+    // } else {
+    //     Some(-1)
+    // }
 }
 
 fn target(player: Player) -> usize {

@@ -2,6 +2,7 @@ pub mod abe;
 pub mod carlo;
 pub mod dedi;
 pub mod monte;
+pub mod monte_ext;
 pub mod neural_net;
 pub mod random;
 
@@ -26,6 +27,7 @@ pub enum BotType {
     Random,
     Dedi,
     Monte,
+    MonteExt,
 }
 
 #[derive(Default)]
@@ -36,6 +38,7 @@ pub struct Bots {
     random: random::Random,
     dedi: dedi::Dedi,
     monte: monte::Monte,
+    monte_ext: monte_ext::Monte,
 }
 
 #[derive(clap_derive::Subcommand, Debug)]
@@ -52,6 +55,8 @@ pub enum BotCommand {
     Dedi(dedi::DediCommand),
     #[command(subcommand)]
     Monte(monte::MonteCommand),
+    #[command(subcommand)]
+    MonteExt(monte_ext::MonteCommand),
 }
 
 impl Bots {
@@ -63,6 +68,7 @@ impl Bots {
             BotType::Random => self.random.get_move(game),
             BotType::Dedi => self.dedi.get_move(game),
             BotType::Monte => self.monte.get_move(game),
+            BotType::MonteExt => self.monte_ext.get_move(game),
         }
     }
 
@@ -74,6 +80,7 @@ impl Bots {
             BotCommand::Abe(cmd) => self.abe.execute(session, cmd),
             BotCommand::Dedi(cmd) => self.dedi.execute(session, cmd),
             BotCommand::Monte(cmd) => self.monte.execute(session, cmd),
+            BotCommand::MonteExt(cmd) => self.monte_ext.execute(session, cmd),
         }
     }
 
