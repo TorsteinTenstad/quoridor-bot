@@ -236,3 +236,72 @@ impl MovePiece {
         })
     }
 }
+
+impl Board {
+    pub fn debug_print(&self) {
+        use WallOrientation::*;
+
+        println!("\n========== BOARD ==========");
+
+        // X-axis labels
+        print!("    ");
+        for x in 0..PIECE_GRID_WIDTH {
+            print!(" {}  ", x);
+        }
+        println!();
+
+        for y in 0..PIECE_GRID_HEIGHT {
+            // --- PIECE ROW ---
+            print!("{:2}  ", y);
+
+            for x in 0..PIECE_GRID_WIDTH {
+                let tile = if self.player_positions[0].x == x && self.player_positions[0].y == y {
+                    'W'
+                } else if self.player_positions[1].x == x && self.player_positions[1].y == y {
+                    'B'
+                } else {
+                    '.'
+                };
+
+                // Print tile
+                print!(" {}", tile);
+
+                // Print vertical wall right of tile (2 tiles long)
+                if x < WALL_GRID_WIDTH {
+                    let above = self.walls.wall_at(Vertical, x as isize, (y - 1) as isize);
+                    let here = self.walls.wall_at(Vertical, x as isize, y as isize);
+
+                    if here || above {
+                        print!(" |");
+                    } else {
+                        print!("  ");
+                    }
+                }
+            }
+            println!();
+
+            // --- HORIZONTAL WALL ROW ---
+            if y < WALL_GRID_HEIGHT {
+                print!("    ");
+                for x in 0..PIECE_GRID_WIDTH {
+                    let this = x < WALL_GRID_WIDTH
+                        && self.walls.wall_at(Horizontal, x as isize, y as isize);
+                    let prev = x > 0
+                        && x - 1 < WALL_GRID_WIDTH
+                        && self.walls.wall_at(Horizontal, (x - 1) as isize, y as isize);
+
+                    if this {
+                        print!(" ---");
+                    } else if prev {
+                        print!(" ---");
+                    } else {
+                        print!("    ");
+                    }
+                }
+                println!();
+            }
+        }
+
+        println!("===========================\n");
+    }
+}
