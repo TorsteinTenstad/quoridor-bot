@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use rand::{Rng, rng, seq::IteratorRandom};
+
 use crate::{
     bot::carlo::{board::Board, mcts},
     data_model::PlayerMove,
@@ -70,29 +72,38 @@ impl Node {
         board: &Board,
         visited: &HashMap<u64, usize>,
         explore: bool,
+        store: bool,
     ) -> (PlayerMove, u64) {
         if self.finished {
             panic!("cannot get move from finished game")
         }
+
+        if !store {
+            return (board.moves().into_iter().choose(&mut rng()).unwrap().0, 0);
+        }
+
         if ts.children.get(&self.id) == None {
             self.expand(ts, board);
         }
-
+        let mut rand = rand::rng();
         ts.children
             .get(&self.id)
             .expect("just expanded")
             .iter()
             .map(|(m, hash)| {
                 let child = ts.nodes.get(hash).expect("all child nodes exists in tree");
+                //let d = f64::log2(self.games.max(1) as f64);
+                let r: f64 = rand.random();
                 (
                     if explore {
                         child.score(self.games)
                             - 1000f64 * (visited.get(hash).cloned().unwrap_or(0) as f64)
-                            + (child.self_dist.unwrap_or(0) as f64)
-                            - (child.other_dist.unwrap_or(0) as f64)
+                            // + f64::sqrt((child.self_dist.unwrap_or(0) as f64) / d)
+                            // - f64::sqrt((child.other_dist.unwrap_or(0) as f64) / d)
+                            + r / 1000_f64
                     } else {
-                        -child.q() + (child.self_dist.unwrap_or(0) as f64)
-                            - (child.other_dist.unwrap_or(0) as f64)
+                        -child.q() // + f64::sqrt((child.self_dist.unwrap_or(0) as f64) / d)
+                        // - f64::sqrt((child.other_dist.unwrap_or(0) as f64) / d)
                     },
                     m,
                     hash,
