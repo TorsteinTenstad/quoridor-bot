@@ -203,7 +203,7 @@ pub fn get_legal_piece_moves_from_positions(
         dir.can_apply(xy) && !wall_blocks(walls, xy.0 as isize, xy.1 as isize, dir)
     };
 
-    for dir in [Dir::PosX, Dir::PosY, Dir::NegX, Dir::NegY] {
+    for dir in [Dir::PosY, Dir::NegY, Dir::PosX, Dir::NegX] {
         if !allow(p1, dir) {
             continue;
         }
@@ -249,7 +249,7 @@ pub fn get_legal_destinations(
         dir.can_apply(xy) && !wall_blocks(walls, xy.0 as isize, xy.1 as isize, dir)
     };
 
-    for dir in [Dir::PosX, Dir::PosY, Dir::NegX, Dir::NegY] {
+    for dir in [Dir::PosY, Dir::NegY, Dir::PosX, Dir::NegX] {
         if !allow(p1, dir) {
             continue;
         }

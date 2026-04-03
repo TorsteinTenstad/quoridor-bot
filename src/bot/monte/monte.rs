@@ -19,6 +19,8 @@ const RETAIN_RATIO: f32 = 0.5;
 const PIECE_PROBABILITY: f64 = 0.8;
 const MAX_DEPTH: usize = 64;
 
+const PIECE_MOVE_COUNT: usize = 6;
+
 pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
     let deadline = Instant::now() + duration;
 
@@ -28,7 +30,7 @@ pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
     let mut wall_moves: ArrayVec<_, 128> = get_legal_wall_moves(game).collect();
     wall_moves.shuffle(&mut rng);
 
-    let evaluations = run_parallel(game, &legal_moves, &wall_moves, deadline);
+    let evaluations = run_parallel(game, &legal_moves, &wall_moves, deadline, BATCH_ROUNDS);
 
     let best_idx = evaluations.first().unwrap().move_index;
     for eval in evaluations.iter().take(10) {
@@ -51,17 +53,18 @@ pub fn monte(game: &Game, duration: Duration) -> PlayerMove {
 }
 
 pub struct Evaluation {
-    move_index: usize,
-    win_count: isize,
-    iterations: usize,
-    attempts: usize,
+    pub move_index: usize,
+    pub win_count: isize,
+    pub iterations: usize,
+    pub attempts: usize,
 }
 
-fn run_parallel(
+pub fn run_parallel(
     game: &Game,
     legal_moves: &[PlayerMove],
     wall_moves: &[PlayerMove],
     deadline: Instant,
+    batch_rounds: usize,
 ) -> Vec<Evaluation> {
     let count_all = legal_moves.len();
     let mut count_candidates = count_all;
@@ -95,7 +98,7 @@ fn run_parallel(
             .for_each_init(
                 || (rand::rng(), vec![(0isize, 0usize, 0usize); count_all]),
                 |(rng, local), _| {
-                    for _ in 0..BATCH_ROUNDS {
+                    for _ in 0..batch_rounds {
                         for &i in shared_candidates.iter() {
                             if let Some(r) = simulate(game, rng, &legal_moves[i], wall_moves) {
                                 local[i].0 += r;
@@ -172,7 +175,7 @@ fn get_legal_moves(game: &Game) -> impl Iterator<Item = PlayerMove> {
         .chain(get_legal_wall_moves(game))
 }
 
-pub fn get_legal_piece_moves(game: &Game, player: Player) -> ArrayVec<MovePiece, 8> {
+pub fn get_legal_piece_moves(game: &Game, player: Player) -> ArrayVec<MovePiece, PIECE_MOVE_COUNT> {
     let p1 = game.board.player_position(player);
     let p2 = game.board.player_position(player.opponent());
     get_legal_piece_moves_from_positions(&game.board.walls, p1, p2)
@@ -182,16 +185,16 @@ pub fn get_legal_piece_moves_from_positions(
     walls: &Walls,
     p1: &PiecePosition,
     p2: &PiecePosition,
-) -> ArrayVec<MovePiece, 8> {
+) -> ArrayVec<MovePiece, PIECE_MOVE_COUNT> {
     let p1 = (p1.x, p1.y);
     let p2 = (p2.x, p2.y);
-    let mut moves: ArrayVec<MovePiece, 8> = ArrayVec::new();
+    let mut moves: ArrayVec<MovePiece, PIECE_MOVE_COUNT> = ArrayVec::new();
 
     let allow = |xy: (usize, usize), dir: Dir| {
         dir.can_apply(xy) && !wall_blocks(walls, xy.0 as isize, xy.1 as isize, dir)
     };
 
-    for dir in [Dir::PosX, Dir::PosY, Dir::NegX, Dir::NegY] {
+    for dir in [Dir::PosY, Dir::NegY, Dir::PosX, Dir::NegX] {
         if !allow(p1, dir) {
             continue;
         }
@@ -237,7 +240,7 @@ pub fn get_legal_destinations(
         dir.can_apply(xy) && !wall_blocks(walls, xy.0 as isize, xy.1 as isize, dir)
     };
 
-    for dir in [Dir::PosX, Dir::PosY, Dir::NegX, Dir::NegY] {
+    for dir in [Dir::PosY, Dir::NegY, Dir::PosX, Dir::NegX] {
         if !allow(p1, dir) {
             continue;
         }

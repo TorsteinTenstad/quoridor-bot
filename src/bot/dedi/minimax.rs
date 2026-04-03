@@ -1,5 +1,8 @@
 use crate::{
-    bot::dedi::walls::{Board, Tile, get_board, get_wall_moves},
+    bot::{
+        dedi::walls::{Board, Tile, get_board, get_wall_moves},
+        monte::monte::get_legal_piece_moves,
+    },
     data_model::{
         Game, PIECE_GRID_HEIGHT, Player, PlayerMove, WALL_GRID_HEIGHT, WALL_GRID_WIDTH,
         WallOrientation,
@@ -24,7 +27,7 @@ pub fn minimax_iterative(game: &Game, duration: Duration, cache: &mut Cache) -> 
     let mut best_move: Option<PlayerMove> = None;
     loop {
         if let Some((_move, h)) = minimax(game, depth, deadline, cache) {
-            // println!("Depth {:?}: found {:?} with h={:?}", depth, _move, h);
+            println!("Depth {:?}: found {:?} with h={:?}", depth, _move, h);
             best_move = _move;
             depth += 1;
             if h == INF || h == -INF {
@@ -65,9 +68,7 @@ pub fn minimax(
     let board_p1 = get_board(game, game.player);
     let board_p2 = get_board(game, game.player.opponent());
 
-    _minimax(
-        game, depth, depth, -INF, INF, deadline, board_p1, board_p2, cache,
-    )
+    _minimax(game, depth, -INF, INF, deadline, board_p1, board_p2, cache)
 }
 
 fn target(player: Player) -> usize {
@@ -81,7 +82,6 @@ fn target(player: Player) -> usize {
 fn _minimax(
     game: &Game,
     depth: usize,
-    depth_initial: usize,
     alpha: isize,
     beta: isize,
     deadline: Option<Instant>,
@@ -118,32 +118,40 @@ fn _minimax(
         return Some((None, -INF));
     }
 
-    let mut moves: ArrayVec<(PlayerMove, Board, Board), 136> = ArrayVec::new();
-
-    for move_piece in all_move_piece_moves(pos_p1, pos_p2) {
-        let legal = is_move_piece_legal_with_players_at_positions(
-            &game.board.walls,
-            pos_p1,
-            pos_p2,
-            &move_piece,
-        );
-
-        if legal {
-            moves.push((
-                PlayerMove::MovePiece(move_piece),
-                board_p1.clone(),
-                board_p2.clone(),
-            ));
-        }
-    }
-
-    for move_wall in get_wall_moves(game, &board_p1, &board_p2) {
-        moves.push(move_wall);
-    }
+    let mut moves: ArrayVec<(PlayerMove, Board, Board), 136> =
+        get_legal_piece_moves(game, game.player)
+            .iter()
+            .map(|move_piece| {
+                (
+                    PlayerMove::MovePiece(move_piece.clone()),
+                    board_p1.clone(),
+                    board_p2.clone(),
+                )
+            })
+            .chain(get_wall_moves(game, &board_p1, &board_p2))
+            .collect();
 
     if moves.len() == 0 {
         return Some((None, -INF));
     }
+
+    moves.sort_by(|i, j| {
+        let h_i = match i.2.tiles[pos_p2.y][pos_p2.x] {
+            Tile::Valid(_, dis) => dis,
+            _ => unreachable!(),
+        } - match i.1.tiles[pos_p1.y][pos_p1.x] {
+            Tile::Valid(_, dis) => dis,
+            _ => unreachable!(),
+        };
+        let h_j = match j.2.tiles[pos_p2.y][pos_p2.x] {
+            Tile::Valid(_, dis) => dis,
+            _ => unreachable!(),
+        } - match j.1.tiles[pos_p1.y][pos_p1.x] {
+            Tile::Valid(_, dis) => dis,
+            _ => unreachable!(),
+        };
+        h_j.partial_cmp(&h_i).unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let mut alpha = alpha;
     let mut h_best = -INF;
@@ -154,7 +162,6 @@ fn _minimax(
         if let Some((_, h_next)) = _minimax(
             &game_next,
             depth - 1,
-            depth_initial,
             -beta,
             -alpha,
             deadline,
@@ -189,10 +196,7 @@ fn _minimax(
 }
 
 fn heuristic(game: &Game, b1: &Board, b2: &Board) -> isize {
-    let walls = game.walls_left[game.player.as_index()];
-    let coeff = if walls > 0 { 1 } else { 1 };
-
-    coeff * _heuristic(game, game.player, b1) - _heuristic(game, game.player.opponent(), b2)
+    _heuristic(game, game.player, b1) - _heuristic(game, game.player.opponent(), b2)
 }
 
 fn _heuristic(game: &Game, player: Player, board: &Board) -> isize {
@@ -201,9 +205,8 @@ fn _heuristic(game: &Game, player: Player, board: &Board) -> isize {
 
     let dis = match tile {
         Tile::Invalid => {
-            println!("\n!!!\nERROR(_heuristic:199)\n!!!\n");
             println!("{:?}", board);
-            return 0;
+            unreachable!();
         }
         Tile::Valid(_, dis) => dis,
     };
@@ -213,47 +216,8 @@ fn _heuristic(game: &Game, player: Player, board: &Board) -> isize {
 
     let mut h: isize = 0;
 
-    h -= dis as isize * 50;
-    h += game.walls_left[player.as_index()] as isize * 2;
-
-    fn ahead_black(y: usize, pos_y: usize) -> bool {
-        y < pos_y
-    }
-    fn ahead_white(y: usize, pos_y: usize) -> bool {
-        y >= pos_y
-    }
-    let y_ahead = match player {
-        Player::Black => ahead_black,
-        Player::White => ahead_white,
-    };
-    let sign: isize = match player {
-        Player::Black => -1,
-        Player::White => 1,
-    };
-
-    for y in 0..WALL_GRID_HEIGHT {
-        for x in 0..WALL_GRID_WIDTH {
-            match game.board.walls.0[x][y] {
-                None => {}
-                Some(WallOrientation::Horizontal) => {
-                    let dx = x as isize - pos.x as isize;
-                    if y_ahead(y, pos.y) {
-                        h += if dx.abs() <= 1 { -5 } else { -3 }
-                    } else {
-                        h += y as isize * sign;
-                    }
-                }
-                Some(WallOrientation::Vertical) => {
-                    let dx = x as isize - pos.x as isize;
-                    if y_ahead(y, pos.y) {
-                        h += if dx.abs() <= 1 { 0 } else { -1 }
-                    } else {
-                        // h += if dx.abs() <= 1 { 0 } else { 0 }
-                    }
-                }
-            }
-        }
-    }
+    h -= dis as isize * 10;
+    h += game.walls_left[player.as_index()] as isize * 15;
 
     h
 }
