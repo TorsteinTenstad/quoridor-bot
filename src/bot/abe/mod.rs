@@ -10,8 +10,7 @@ use crate::{
         all_move_piece_moves, execute_move_unchecked, execute_move_unchecked_inplace,
         is_move_legal, is_move_piece_legal, room_for_wall_placement,
     },
-    l_p_a_star::{Pathfinding, dump},
-    render_board::render_board,
+    l_p_a_star::Pathfinding,
     session::Session,
     square_outline_iterator::SquareOutlineIterator,
 };
@@ -33,6 +32,7 @@ pub struct Abe {
     default_depth: Option<usize>,
     default_seconds: Option<u64>,
     default_heuristic: Heuristic,
+    min_depth_for_caching: usize,
     game_state: Arc<Mutex<Game>>,
     cache: Cache,
     workers: Vec<JoinHandle<()>>,
@@ -43,18 +43,29 @@ impl Abe {
     pub fn init(&mut self, args: &Args) {
         self.default_depth = args.depth;
         self.default_seconds = args.seconds;
+        self.min_depth_for_caching = args.min_depth_for_caching;
         if let Some(heuristic) = args.heuristic {
             self.default_heuristic = heuristic;
         }
         self.update_game_state(Game::new());
-        for _i in 0..args.abe_background_threads {
+        for i in 0..args.abe_background_threads {
+            let n = args.abe_background_threads;
             let game_state = Arc::clone(&self.game_state);
             let cache = self.cache.clone();
             let heuristic = self.default_heuristic;
+            let min_depth_for_caching = self.min_depth_for_caching;
             self.flags.push(Default::default());
             let flag = self.flags.iter().last().unwrap().clone();
             self.workers.push(std::thread::spawn(move || {
-                worker(game_state, cache, heuristic, flag)
+                worker(
+                    i,
+                    n,
+                    game_state,
+                    cache,
+                    heuristic,
+                    min_depth_for_caching,
+                    flag,
+                )
             }));
         }
     }
@@ -70,33 +81,47 @@ impl Abe {
 }
 
 fn worker(
+    i: usize,
+    n: usize,
     game_state: Arc<Mutex<Game>>,
     mut cache: Cache,
     heuristic: Heuristic,
+    min_depth_for_caching: usize,
     stop_flag: Arc<AtomicBool>,
 ) -> () {
     let mut currently_working_on = game_state.lock().unwrap().clone();
     let mut depth = 0;
     let stop = || stop_flag.swap(false, Ordering::Acquire);
     loop {
-        let mut pathfinding = Pathfinding::new(&currently_working_on.board);
-        alpha_beta(
-            &currently_working_on,
-            depth + 1,
-            WHITE_LOSES_BLACK_WINS,
-            WHITE_WINS_BLACK_LOSES,
-            &[],
-            &stop,
-            heuristic,
-            &mut cache,
-            &mut pathfinding,
-        );
-        let potentially_new = game_state.lock().unwrap().clone();
-        if potentially_new != currently_working_on {
-            currently_working_on = potentially_new;
-            depth = 0;
-        } else {
-            depth += 1;
+        depth += 1;
+        for player_move in moves_ordered_by_heuristic_quality(&currently_working_on)
+            .iter()
+            .skip(i)
+            .step_by(n)
+        {
+            let child_game_state = execute_move_unchecked(&currently_working_on, &player_move);
+            let mut pathfinding = Pathfinding::new(&child_game_state.board);
+            if pathfinding.any_blocked(&child_game_state.board) {
+                continue;
+            }
+            alpha_beta(
+                &child_game_state,
+                depth,
+                WHITE_LOSES_BLACK_WINS,
+                WHITE_WINS_BLACK_LOSES,
+                &[],
+                &stop,
+                heuristic,
+                &mut cache,
+                min_depth_for_caching,
+                &mut pathfinding,
+            );
+            let potentially_new = game_state.lock().unwrap().clone();
+            if potentially_new != currently_working_on {
+                currently_working_on = potentially_new;
+                depth = 0;
+                break;
+            }
         }
     }
 }
@@ -159,6 +184,7 @@ impl Bot for Abe {
             self.default_seconds.map(Duration::from_secs),
             self.default_heuristic,
             &mut self.cache,
+            self.min_depth_for_caching,
         );
         let depth = eval.best_moves.len();
         let m = eval.best_moves.into_iter().last().unwrap();
@@ -184,6 +210,7 @@ impl Bot for Abe {
                     seconds.map(Duration::from_secs),
                     heuristic.unwrap_or(self.default_heuristic),
                     &mut self.cache,
+                    self.min_depth_for_caching,
                 );
                 println!("{eval} {:?}", duration);
             }
@@ -198,6 +225,7 @@ impl Bot for Abe {
                     seconds.map(Duration::from_secs),
                     heuristic.unwrap_or(self.default_heuristic),
                     &mut self.cache,
+                    self.min_depth_for_caching,
                 );
                 print!("{}", eval.best_moves.last().unwrap());
                 print!(" score:{}", eval.score);
@@ -239,6 +267,7 @@ impl Bot for Abe {
                     seconds.map(Duration::from_secs),
                     heuristic.unwrap_or(self.default_heuristic),
                     &mut self.cache,
+                    self.min_depth_for_caching,
                 );
                 let move_name = initial
                     .as_ref()
@@ -279,6 +308,7 @@ pub fn best_move_alpha_beta_iterative_deepening(
     search_duration: Duration,
     heuristic: Heuristic,
     cache: &mut Cache,
+    min_depth_for_caching: usize,
 ) -> BoardEvaluation {
     let deadline = Instant::now() + search_duration;
     let stop = || Instant::now() > deadline;
@@ -295,6 +325,7 @@ pub fn best_move_alpha_beta_iterative_deepening(
             &stop,
             heuristic,
             cache,
+            min_depth_for_caching,
             &mut pathfinding,
         ) {
             AlphaBetaResult::Stopped => {
@@ -312,6 +343,7 @@ pub fn best_move_alpha_beta(
     depth: usize,
     heuristic: Heuristic,
     cache: &mut Cache,
+    min_depth_for_caching: usize,
 ) -> BoardEvaluation {
     let mut pathfinding = Pathfinding::new(&game.board);
     match alpha_beta(
@@ -323,6 +355,7 @@ pub fn best_move_alpha_beta(
         &|| false,
         heuristic,
         cache,
+        min_depth_for_caching,
         &mut pathfinding,
     ) {
         AlphaBetaResult::Stopped => unreachable!(),
@@ -379,6 +412,7 @@ fn alpha_beta<F>(
     stop: &F,
     heuristic: Heuristic,
     cache: &mut Cache,
+    min_depth_for_caching: usize,
     pathfinding: &mut Pathfinding,
 ) -> AlphaBetaResult
 where
@@ -445,6 +479,7 @@ where
                     stop,
                     heuristic,
                     cache,
+                    min_depth_for_caching,
                     &mut next_pathfinding,
                 ) {
                     AlphaBetaResult::Moves(eval) => (eval.score, eval.best_moves),
@@ -466,11 +501,11 @@ where
                 score: value,
                 best_moves,
             };
-            if depth > 1 {
+            if depth >= min_depth_for_caching {
                 let game_hash = hash_to_u64(game);
                 let mut t = cache.transposition_table.lock().unwrap();
                 if t.get(&game_hash)
-                    .is_none_or(|eval| eval.best_moves.len() < depth)
+                    .is_none_or(|cache_eval| cache_eval.best_moves.len() < depth)
                 {
                     t.insert(game_hash, eval.clone());
                 }
@@ -503,6 +538,7 @@ where
                     stop,
                     heuristic,
                     cache,
+                    min_depth_for_caching,
                     &mut next_pathfinding,
                 ) {
                     AlphaBetaResult::Moves(eval) => (eval.score, eval.best_moves),
@@ -524,11 +560,11 @@ where
                 score: value,
                 best_moves,
             };
-            if depth > 1 {
+            if depth >= min_depth_for_caching {
                 let game_hash = hash_to_u64(game);
                 let mut t = cache.transposition_table.lock().unwrap();
                 if t.get(&game_hash)
-                    .is_none_or(|eval| eval.best_moves.len() < depth)
+                    .is_none_or(|cache_eval| cache_eval.best_moves.len() < depth)
                 {
                     t.insert(game_hash, eval.clone());
                 }
@@ -589,13 +625,22 @@ pub fn get_bot_move(
     duration: Option<Duration>,
     heuristic: Heuristic,
     cache: &mut Cache,
+    min_depth_for_caching: usize,
 ) -> (Duration, BoardEvaluation) {
     let start_time = std::time::Instant::now();
     let best_moves = match (depth, duration) {
-        (Some(depth), _) => best_move_alpha_beta(game, depth, heuristic, cache),
+        (Some(depth), _) => {
+            best_move_alpha_beta(game, depth, heuristic, cache, min_depth_for_caching)
+        }
         (_, duration) => {
             let duration = duration.unwrap_or(DEFAULT_DURATION);
-            best_move_alpha_beta_iterative_deepening(game, duration, heuristic, cache)
+            best_move_alpha_beta_iterative_deepening(
+                game,
+                duration,
+                heuristic,
+                cache,
+                min_depth_for_caching,
+            )
         }
     };
     (start_time.elapsed(), best_moves)

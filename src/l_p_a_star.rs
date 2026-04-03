@@ -8,7 +8,7 @@ use crate::{
 };
 use std::array::from_fn;
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct Pathfinding {
     pub white: LPAStar,
     pub black: LPAStar,
@@ -56,7 +56,7 @@ impl Pathfinding {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 struct Estimates {
     g: u16,
     rhs: u16,
@@ -80,7 +80,7 @@ pub fn is_start(pos: &PiecePosition, player: Player) -> bool {
     pos.y == start_y(player)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct LPAStar {
     board: [[Estimates; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
     player: Player,
