@@ -8,30 +8,18 @@ use crate::{
         is_move_piece_legal_with_players_at_positions, new_position_after_move_piece_unchecked,
     },
 };
-use std::fmt::Debug;
 
 #[derive(Clone)]
 pub struct Board {
     pub game: Game,
-    bfs_white: Bfs,
-    bfs_black: Bfs,
+    pub bfs_white: Bfs,
+    pub bfs_black: Bfs,
     wall_moves: [[[bool; 2]; WALL_GRID_WIDTH]; WALL_GRID_HEIGHT],
-}
-
-impl Debug for Board {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // for row in self.path {
-        //     for square in row {
-        //         let _ = write!(f, "{:3}{:?} ", square.1, square.0);
-        //     }
-        //     let _ = writeln!(f);
-        // }
-        Ok(())
-    }
 }
 
 impl From<&Game> for Board {
     fn from(game: &Game) -> Self {
+        // TODO: one redundant clone
         let mut game_white = game.clone();
         let mut game_black = game.clone();
         game_white.player = Player::White;
@@ -59,8 +47,34 @@ impl From<&Game> for Board {
 
 impl Board {
     pub fn play_move(&mut self, m: PlayerMove) {
+        let player = self.game.player;
         self.game = execute_move_unchecked(&self.game, &m);
         match m {
+            PlayerMove::MovePiece(_) => {
+                // TODO: find new `dir` with BFS
+                let pos = self.game.board.player_position(player);
+                if player == Player::White {
+                    self.bfs_white.invalidate(&self.game);
+                    self.bfs_white.dir = (
+                        self.bfs_white.path[pos.y][pos.x].0,
+                        self.bfs_white.path[pos.y][pos.x].1 as usize,
+                    );
+                    if self.bfs_white.dir.0 == PathBlock::Unreachable {
+                        self.bfs_white.re_bfs(&self.game);
+                    } else {
+                    }
+                }
+                if player == Player::Black {
+                    self.bfs_black.invalidate(&self.game);
+                    self.bfs_black.dir = (
+                        self.bfs_black.path[pos.y][pos.x].0,
+                        self.bfs_black.path[pos.y][pos.x].1 as usize,
+                    );
+                    if self.bfs_black.dir.0 == PathBlock::Unreachable {
+                        self.bfs_black.re_bfs(&self.game);
+                    }
+                }
+            }
             PlayerMove::PlaceWall {
                 orientation,
                 position,
@@ -72,11 +86,10 @@ impl Board {
                 self.bfs_black
                     .recalculate_bfs(&self.game, position.x, position.y, orientation);
             }
-            _ => {}
         }
     }
 
-    pub fn moves(&self) -> impl Iterator<Item = (PlayerMove, u8)> {
+    pub fn moves(&self) -> impl Iterator<Item = (PlayerMove, usize, usize)> {
         let player_moves = {
             let p1 = self.game.board.player_position(self.game.player);
             let p2 = self.game.board.player_position(self.game.player.opponent());
@@ -88,11 +101,19 @@ impl Board {
                 .map(|m| {
                     let pos = new_position_after_move_piece_unchecked(p1, &m, p2);
 
-                    let dist = match self.game.player {
-                        Player::White => self.bfs_white.path[pos.y][pos.x].1,
-                        Player::Black => self.bfs_black.path[pos.y][pos.x].1,
+                    let self_dist = match self.game.player {
+                        // min as worse position will be unexplored / max dist.
+                        Player::White => (self.bfs_white.path[pos.y][pos.x].1 as usize)
+                            .min(self.bfs_white.dir.1 + 1),
+                        Player::Black => (self.bfs_black.path[pos.y][pos.x].1 as usize)
+                            .min(self.bfs_black.dir.1 + 1),
                     };
-                    (PlayerMove::MovePiece(m), dist)
+                    let other_dist = match self.game.player {
+                        Player::White => self.bfs_black.dir.1,
+                        Player::Black => self.bfs_white.dir.1,
+                    };
+                    //println!("{:?}", self.bfs_black.path);
+                    (PlayerMove::MovePiece(m), self_dist, other_dist)
                 })
         };
 
@@ -122,10 +143,15 @@ impl Board {
                                 return None;
                             }
 
-                            let dist = if self.game.player == Player::White {
+                            let self_dist = if self.game.player == Player::White {
                                 dist_w
                             } else {
                                 dist_b
+                            };
+                            let other_dist = if self.game.player == Player::White {
+                                dist_b
+                            } else {
+                                dist_w
                             };
 
                             Some((
@@ -133,7 +159,8 @@ impl Board {
                                     orientation,
                                     position: WallPosition { x, y },
                                 },
-                                dist,
+                                self_dist,
+                                other_dist,
                             ))
                         })
                     })
@@ -142,7 +169,12 @@ impl Board {
         player_moves.chain(wall_moves)
     }
 
-    pub fn valid_wall(&self, x: usize, y: usize, orientation: WallOrientation) -> (bool, u8, u8) {
+    pub fn valid_wall(
+        &self,
+        x: usize,
+        y: usize,
+        orientation: WallOrientation,
+    ) -> (bool, usize, usize) {
         let mut board = self.clone();
         board.place_wall(x, y, orientation);
 
@@ -153,15 +185,9 @@ impl Board {
             .bfs_black
             .recalculate_bfs(&board.game, x, y, orientation);
 
-        let white_pos = board.game.board.player_position(Player::White);
-        let black_pos = board.game.board.player_position(Player::Black);
-
-        match (
-            board.bfs_white.path[white_pos.y][white_pos.x],
-            board.bfs_black.path[black_pos.y][black_pos.x],
-        ) {
-            ((PathBlock::Unreachable, _), _) => (false, 0, 0),
-            (_, (PathBlock::Unreachable, _)) => (false, 0, 0),
+        match (board.bfs_white.dir, board.bfs_black.dir) {
+            ((PathBlock::Unreachable, _), _) => (false, 255, 255),
+            (_, (PathBlock::Unreachable, _)) => (false, 255, 255),
             ((_, dist_w), (_, dist_b)) => (true, dist_w, dist_b),
         }
     }

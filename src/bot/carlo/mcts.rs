@@ -1,4 +1,5 @@
 use crate::{
+    args::DEFAULT_DURATION,
     bot::carlo::{bfs::game_winner, board::Board},
     data_model::{Game, PlayerMove},
 };
@@ -17,7 +18,12 @@ pub struct Mcts {
 }
 
 impl Mcts {
-    pub fn add_node(&mut self, game: &Game, dist: Option<u8>) -> u64 {
+    pub fn add_node(
+        &mut self,
+        game: &Game,
+        self_dist: Option<usize>,
+        other_dist: Option<usize>,
+    ) -> u64 {
         let mut hasher = DefaultHasher::new();
         game.hash(&mut hasher);
         let hash = hasher.finish();
@@ -28,7 +34,8 @@ impl Mcts {
 
         let mut node = Node::default();
         node.finished = game_winner(&game) != None;
-        node.dist = dist;
+        node.self_dist = self_dist;
+        node.other_dist = other_dist;
         node.id = hash;
 
         self.nodes.insert(hash, node);
@@ -36,7 +43,7 @@ impl Mcts {
     }
 
     fn get_node_by_state(&mut self, game: &Game) -> &mut Node {
-        let hash = self.add_node(game, None);
+        let hash = self.add_node(game, None, None);
         self.nodes.get_mut(&hash).expect("just added")
     }
 
@@ -48,7 +55,7 @@ impl Mcts {
         let mut depth = 0;
 
         let start_time = std::time::Instant::now();
-        while start_time.elapsed() < Duration::from_secs(5) {
+        while start_time.elapsed() < DEFAULT_DURATION {
             sims += 1;
             let mut node = self.nodes.get(&root.id).unwrap().to_owned();
             let mut stack = vec![root.id];
@@ -56,6 +63,30 @@ impl Mcts {
             let mut visited = HashMap::<u64, usize>::new();
             let mut finished = node.finished;
             while !finished {
+                // println!("{:?}", board.game.board.player_positions[0]);
+                // println!("{:?}", board.bfs_white);
+                // println!("{:?}", board.bfs_black);
+                // println!(
+                //     "{} {} {:?}",
+                //     board.bfs_white.queue_i, board.bfs_white.queue_end, board.bfs_white.queue
+                // );
+                if stack.len() > 20000 {
+                    println!("{:?}", board.game);
+                    println!("{:?}", board.bfs_white.dir);
+                    println!("{:?}", board.bfs_white);
+                    println!("{:?}", board.bfs_black.dir);
+                    println!("{:?}", board.bfs_black);
+                    println!();
+                    println!("{}: {:?}", "r", self.nodes.get(&node.id).unwrap());
+                    for (m, c) in self.children.get(&node.id).unwrap() {
+                        let c = self.nodes.get(c).unwrap();
+                        println!(
+                            "{}: {}/{} {} d:{:?}-{:?}",
+                            "c", c.wins, c.games, m, c.self_dist, c.other_dist
+                        );
+                    }
+                    panic!();
+                }
                 depth += 1;
                 visited.insert(node.id, visited.get(&node.id).cloned().unwrap_or(0) + 1);
                 let (m, child) = node.pick_move(self, &board, &visited, true);
@@ -78,9 +109,15 @@ impl Mcts {
             }
         }
 
+        println!("{:?}", root_board.bfs_white);
+        println!("{:?}", root_board.bfs_black);
         println!("{}: {:?}", "r", self.nodes.get(&root.id).unwrap());
         for (m, c) in self.children.get(&root.id).unwrap() {
-            println!("{}: {:?} {:?}", "c", m, self.nodes.get(c).unwrap());
+            let c = self.nodes.get(c).unwrap();
+            println!(
+                "{}: {}/{} {} d:{:?}-{:?}",
+                "c", c.wins, c.games, m, c.self_dist, c.other_dist
+            );
         }
         println!("sims: {}, avg. depth: {}", sims, depth / sims);
 

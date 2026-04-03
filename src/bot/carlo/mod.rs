@@ -31,7 +31,7 @@ impl Bot for Carlo {
         match cmd {
             CarloCommand::Move => session.make_move(self.get_move(&session.game)),
             CarloCommand::DebugBoard => {
-                println!("{:?}", board::Board::from(&session.game))
+                // println!("{:?}", board::Board::from(&session.game))
             }
         }
     }

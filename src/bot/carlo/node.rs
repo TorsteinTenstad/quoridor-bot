@@ -9,7 +9,8 @@ use crate::{
 #[derive(Default, Clone, Debug)]
 pub struct Node {
     pub id: u64,
-    pub dist: Option<u8>,
+    pub self_dist: Option<usize>,
+    pub other_dist: Option<usize>,
     pub games: usize,
     pub wins: usize,
     pub finished: bool,
@@ -43,15 +44,21 @@ impl Node {
             panic!("already expanded")
         }
 
-        let children = board
+        let children: Vec<(PlayerMove, u64)> = board
             .moves()
-            .map(|(m, dist)| {
+            .map(|(m, self_dist, other_dist)| {
                 let game = execute_move_unchecked(&board.game, &m);
 
-                let hash = ts.add_node(&game, Some(dist));
+                let hash = ts.add_node(&game, Some(self_dist), Some(other_dist));
                 (m, hash)
             })
             .collect();
+
+        if children.len() == 0 {
+            println!("{:?}", board.game);
+            println!("{:?}", board.bfs_black);
+            println!("{:?}", board.bfs_white);
+        }
 
         ts.children.insert(self.id, children);
     }
@@ -79,10 +86,12 @@ impl Node {
                 (
                     if explore {
                         child.score(self.games)
-                            - (child.dist.unwrap_or(0) as f64) / 40f64
                             - 1000f64 * (visited.get(hash).cloned().unwrap_or(0) as f64)
+                            - (child.self_dist.unwrap_or(0) as f64) / 20f64
+                        // + (child.other_dist.unwrap_or(0) as f64) / 40f64
                     } else {
-                        -child.q() - (child.dist.unwrap_or(0) as f64) / 40f64
+                        -child.q() - (child.self_dist.unwrap_or(0) as f64) / 20f64
+                        // + (child.other_dist.unwrap_or(0) as f64) / 40f64
                     },
                     m,
                     hash,
