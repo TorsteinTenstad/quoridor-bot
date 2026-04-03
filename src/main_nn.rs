@@ -4,7 +4,7 @@ pub mod all_moves;
 pub mod game_logic;
 pub mod a_star;
 
-use nn_bot::{QuoridorNet, EncodedState, encode_batch_to_tensor};
+use nn_bot::{QuoridorNet, EncodedState, encode_batch_to_tensor, MctsConfig, SelfPlayCfg, TrainCfg, train_loop};
 use burn::backend::NdArray;
 use clap::Parser;
 use std::path::PathBuf;
@@ -27,10 +27,76 @@ struct Args {
     /// Run tests
     #[arg(short, long)]
     test: bool,
+    
+    /// Run training loop (AlphaZero-style self-play + MCTS)
+    #[arg(long)]
+    train: bool,
+    
+    /// Number of training iterations (default: 100)
+    #[arg(long, default_value = "100")]
+    iterations: usize,
+    
+    /// Number of self-play games per iteration (default: 10)
+    #[arg(long, default_value = "10")]
+    games_per_iter: usize,
+    
+    /// Number of MCTS simulations per move (default: 400)
+    #[arg(long, default_value = "400")]
+    sims_per_move: usize,
+    
+    /// Output path for trained model (default: trained_model.mpk)
+    #[arg(short, long)]
+    output: Option<PathBuf>,
 }
 
 fn main() {
     let args = Args::parse();
+    
+    if args.train {
+        println!("Starting AlphaZero-style training...\n");
+        
+        // Create a new network (randomly initialized)
+        let net = QuoridorNet::new();
+        println!("Created new neural network with random initialization");
+        
+        // Configure MCTS
+        let mcts_cfg = MctsConfig {
+            c_puct: 1.5,
+            dirichlet_alpha: 0.3,
+            dirichlet_eps: 0.25,
+            simulations: args.sims_per_move,
+            root_noise: true,
+            temperature: 1.0,
+        };
+        
+        // Configure self-play
+        let sp_cfg = SelfPlayCfg {
+            sims_per_move: args.sims_per_move,
+            temperature_moves: 10,
+        };
+        
+        // Configure training
+        let train_cfg = TrainCfg {
+            batch_size: 128,
+            steps_per_iter: 100,
+            games_per_iter: args.games_per_iter,
+            replay_size: 10_000,
+            iterations: args.iterations,
+        };
+        
+        let output_path = args.output.unwrap_or_else(|| PathBuf::from("trained_model.mpk"));
+        
+        println!("\nTraining Configuration:");
+        println!("  Iterations: {}", train_cfg.iterations);
+        println!("  Games per iteration: {}", train_cfg.games_per_iter);
+        println!("  MCTS simulations per move: {}", args.sims_per_move);
+        println!("  Output path: {}\n", output_path.display());
+        
+        train_loop(&net, mcts_cfg, sp_cfg, train_cfg, Some(&output_path));
+        
+        println!("\n✅ Training complete! Model saved to {}", output_path.display());
+        return;
+    }
     
     if args.test {
         println!("Running tests...");
@@ -92,6 +158,7 @@ fn main() {
     // Default: show help
     println!("No command specified. Use --help for usage information.");
     println!("\nExamples:");
+    println!("  Train a network:                cargo run --bin quoridor-bot-nn -- --train --iterations 10 --games-per-iter 5");
     println!("  Save a zero-weight network:     cargo run --bin quoridor-bot-nn -- --save model.mpk");
     println!("  Save an upward-biased network:  cargo run --bin quoridor-bot-nn -- --save-biased-up biased_up.mpk");
     println!("  Load and test a network:        cargo run --bin quoridor-bot-nn -- --load model.mpk");
