@@ -15,6 +15,7 @@ use std::{
 pub struct Mcts {
     pub nodes: HashMap<u64, Node>,
     pub children: HashMap<u64, Vec<(PlayerMove, u64)>>,
+    pub default_seconds: u64,
 }
 
 impl Mcts {
@@ -55,7 +56,7 @@ impl Mcts {
         let mut depth = 0;
 
         let start_time = std::time::Instant::now();
-        while start_time.elapsed() < DEFAULT_DURATION {
+        while start_time.elapsed() < Duration::from_secs(self.default_seconds) {
             sims += 1;
             let mut node = self.nodes.get(&root.id).unwrap().to_owned();
             let mut stack = vec![root.id];

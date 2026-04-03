@@ -86,6 +86,7 @@ impl Bots {
 
     pub fn init(&mut self, args: &Args) {
         self.abe.init(args);
+        self.carlo.init(args);
         self.neural_net.init(args);
         self.dedi.init(args);
         self.monte.init(args);
