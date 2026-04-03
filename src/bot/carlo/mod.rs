@@ -4,6 +4,7 @@ mod mcts;
 mod node;
 
 use crate::{
+    args::{self, DEFAULT_DURATION},
     bot::Bot,
     data_model::{Game, PlayerMove},
     session::Session,
@@ -18,6 +19,12 @@ pub struct Carlo {
 pub enum CarloCommand {
     Move,
     DebugBoard,
+}
+
+impl Carlo {
+    pub fn init(&mut self, args: &args::Args) {
+        self.mcst.default_seconds = args.seconds.unwrap_or(DEFAULT_DURATION.as_secs());
+    }
 }
 
 impl Bot for Carlo {

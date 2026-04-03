@@ -15,6 +15,9 @@ pub struct Args {
     #[arg(short, long)]
     pub heuristic: Option<crate::bot::abe::heuristic::Heuristic>,
 
+    #[arg(short = 'c', long, default_value_t = 1)]
+    pub min_depth_for_caching: usize,
+
     #[clap(short, long, default_value_t = 0.0)]
     pub temperature: f32,
 

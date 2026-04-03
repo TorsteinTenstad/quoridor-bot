@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use crate::{
-    bot::abe::{WHITE_LOSES_BLACK_WINS, WHITE_WINS_BLACK_LOSES},
+    bot::abe::alpha_beta::{WHITE_LOSES_BLACK_WINS, WHITE_WINS_BLACK_LOSES},
     data_model::{
         Game, PIECE_GRID_HEIGHT, Player, TOTAL_WALLS, WALL_GRID_HEIGHT, WALL_GRID_WIDTH,
         WallOrientation,

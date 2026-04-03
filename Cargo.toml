@@ -14,9 +14,6 @@ path = "src/main_gui.rs"
 [dependencies]
 arraydeque = "0.5"
 arrayvec = "0.7"
-burn = {version = "0.16.0", features = ["ndarray"] }
-burn-tch = "0.16"
-burn-ndarray = "0.14"
 clap = "4.5.45"
 clap_derive = "4.5.45"
 ggez = "0.9.3"
