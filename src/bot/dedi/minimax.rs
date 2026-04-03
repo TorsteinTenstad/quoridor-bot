@@ -1,15 +1,13 @@
 use crate::{
     bot::{
-        dedi::walls::{Board, Tile, get_board, get_wall_moves},
+        dedi::{
+            heuristic::Heuristic,
+            walls::{Board, Tile, get_board, get_wall_moves},
+        },
         monte::monte::get_legal_piece_moves,
     },
-    data_model::{
-        Game, PIECE_GRID_HEIGHT, Player, PlayerMove, WALL_GRID_HEIGHT, WALL_GRID_WIDTH,
-        WallOrientation,
-    },
-    game_logic::{
-        all_move_piece_moves, execute_move_unchecked, new_position_after_move_piece_unchecked,
-    },
+    data_model::{Game, PIECE_GRID_HEIGHT, Player, PlayerMove},
+    game_logic::{execute_move_unchecked, new_position_after_move_piece_unchecked},
 };
 use arrayvec::ArrayVec;
 use std::hash::{Hash, Hasher};
@@ -41,15 +39,23 @@ pub struct Cache {
     table: HashMap<u64, CacheLine>,
 }
 
-pub fn minimax_iterative(game: &Game, duration: Duration, cache: &mut Cache) -> Option<PlayerMove> {
+pub fn minimax_iterative(
+    game: &Game,
+    heuristic: Heuristic,
+    duration: Duration,
+    cache: &mut Cache,
+) -> Option<PlayerMove> {
     let deadline = Some(Instant::now() + duration);
     let mut depth = 2;
     let mut best_move: Option<PlayerMove> = None;
 
     loop {
-        match minimax(game, depth, deadline, cache) {
+        match minimax(game, depth, heuristic, deadline, cache) {
             Some((_move, h)) => {
                 println!("Depth {:?}: found {:?} with h={:?}", depth, _move, h);
+                if _move.is_none() {
+                    break;
+                }
                 best_move = _move;
                 depth += 1;
                 if h >= INF || h <= -INF {
@@ -69,17 +75,21 @@ pub fn minimax_iterative(game: &Game, duration: Duration, cache: &mut Cache) -> 
 pub fn minimax(
     game: &Game,
     depth: usize,
+    heuristic: Heuristic,
     deadline: Option<Instant>,
     cache: &mut Cache,
 ) -> Option<(Option<PlayerMove>, isize)> {
     let board_p1 = get_board(game, game.player);
     let board_p2 = get_board(game, game.player.opponent());
-    _minimax(game, depth, -INF, INF, deadline, board_p1, board_p2, cache)
+    _minimax(
+        game, depth, heuristic, -INF, INF, deadline, board_p1, board_p2, cache,
+    )
 }
 
 fn _minimax(
     game: &Game,
     depth: usize,
+    heuristic: Heuristic,
     alpha: isize,
     beta: isize,
     deadline: Option<Instant>,
@@ -125,7 +135,7 @@ fn _minimax(
     }
 
     if depth == 0 {
-        let h = heuristic(game, &board_p1, &board_p2);
+        let h = heuristic_eval(heuristic, game, &board_p1, &board_p2);
         return Some((None, h));
     }
 
@@ -177,6 +187,7 @@ fn _minimax(
         match _minimax(
             &game_next,
             depth - 1,
+            heuristic,
             -beta,
             -alpha,
             deadline,
@@ -234,24 +245,6 @@ fn hash_to_u64<T: Hash>(value: &T) -> u64 {
     hasher.finish()
 }
 
-fn heuristic(game: &Game, b1: &Board, b2: &Board) -> isize {
-    _heuristic(game, game.player, b1) - _heuristic(game, game.player.opponent(), b2)
-}
-
-fn _heuristic(game: &Game, player: Player, board: &Board) -> isize {
-    let pos = game.board.player_position(player);
-    let dis = match board.tiles[pos.y][pos.x] {
-        Tile::Valid(_, dis) => dis,
-        Tile::Invalid => unreachable!(),
-    };
-    if dis == 0 {
-        return INF;
-    }
-
-    let mut h: isize = 0;
-
-    h -= dis as isize * 10;
-    h += game.walls_left[player.as_index()] as isize * 15;
-
-    h
+fn heuristic_eval(heuristic: Heuristic, game: &Game, b1: &Board, b2: &Board) -> isize {
+    heuristic.eval(game, game.player, b1) - heuristic.eval(game, game.player.opponent(), b2)
 }
