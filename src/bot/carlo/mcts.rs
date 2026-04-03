@@ -79,7 +79,7 @@ impl Mcts {
 
                 board.play_move(m);
 
-                if stack.len() > 64 {
+                if stack.len() > 128 {
                     break;
                     println!("{:?}", board.game);
                     println!("{:?}", board.bfs_white.dir);
