@@ -46,7 +46,7 @@ impl Abe {
         self.default_depth = args.depth;
         self.default_seconds = args.seconds;
         self.min_depth_for_caching = args.min_depth_for_caching;
-        if let Some(heuristic) = args.heuristic {
+        if let Some(heuristic) = args.abe_heuristic {
             self.default_heuristic = heuristic;
         }
         self.update_game_state(Game::new());

@@ -12,8 +12,11 @@ pub struct Args {
     #[arg(short = 't', long, default_value_t = 0)]
     pub abe_background_threads: usize,
 
-    #[arg(short, long)]
-    pub heuristic: Option<crate::bot::abe::heuristic::Heuristic>,
+    #[arg(long)]
+    pub abe_heuristic: Option<crate::bot::abe::heuristic::Heuristic>,
+
+    #[arg(long)]
+    pub dedi_heuristic: Option<crate::bot::dedi::heuristic::Heuristic>,
 
     #[arg(short = 'c', long, default_value_t = 1)]
     pub min_depth_for_caching: usize,

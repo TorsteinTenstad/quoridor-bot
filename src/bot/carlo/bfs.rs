@@ -233,11 +233,15 @@ impl Bfs {
                 i += 1;
                 continue;
             }
-            for (dx, dy) in board_neighbors(game, x, y) {
+            for (dx, dy) in board_neighbors_unchecked(x, y) {
                 let nx = x + dx;
                 let ny = y + dy;
 
                 if self.path[ny as usize][nx as usize].0 != PathBlock::Unreachable {
+                    continue;
+                }
+
+                if wall_blocks(game, x, y, dx, dy) {
                     continue;
                 }
 
@@ -370,15 +374,21 @@ impl Bfs {
             let (x, y) = self.invalid_q[i];
             let mut best_neighbor: Option<((i8, i8), u8)> = None;
 
-            for (dx, dy) in board_neighbors(game, x, y) {
+            for (dx, dy) in board_neighbors_unchecked(x, y) {
                 let nx = x + dx;
                 let ny = y + dy;
 
                 if self.path[ny as usize][nx as usize].0 != PathBlock::Unreachable {
-                    let dist = self.path[ny as usize][nx as usize].1;
-                    if best_neighbor.map(|n| dist < n.1).unwrap_or(true) {
-                        best_neighbor = Some(((nx, ny), dist));
-                    }
+                    continue;
+                }
+
+                if wall_blocks(game, x, y, dx, dy) {
+                    continue;
+                }
+
+                let dist = self.path[ny as usize][nx as usize].1;
+                if best_neighbor.map(|n| dist < n.1).unwrap_or(true) {
+                    best_neighbor = Some(((nx, ny), dist));
                 }
             }
 
@@ -579,7 +589,7 @@ fn board_neighbors(game: &Game, x: i8, y: i8) -> impl Iterator<Item = (i8, i8)> 
 }
 
 fn board_neighbors_unchecked(x: i8, y: i8) -> impl Iterator<Item = (i8, i8)> {
-    [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    [(-1, 0), (0, -1), (1, 0), (0, 1)]
         .into_iter()
         .filter(move |(dx, dy)| {
             let nx = x + dx;

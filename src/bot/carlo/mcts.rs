@@ -1,7 +1,7 @@
 use crate::{
     args::DEFAULT_DURATION,
     bot::carlo::{bfs::game_winner, board::Board},
-    data_model::{Game, PlayerMove},
+    data_model::{Game, Player, PlayerMove},
 };
 
 use super::node::Node;
@@ -53,7 +53,7 @@ impl Mcts {
         let root_board = Board::from(root_game);
 
         let mut sims = 0;
-        let mut depth = 0;
+        let mut total_depth = 0;
 
         let start_time = std::time::Instant::now();
         while start_time.elapsed() < Duration::from_secs(self.default_seconds) {
@@ -63,6 +63,7 @@ impl Mcts {
             let mut board = root_board.clone();
             let mut visited = HashMap::<u64, usize>::new();
             let mut finished = node.finished;
+            let mut depth = 0;
             while !finished {
                 // println!("{:?}", board.game.board.player_positions[0]);
                 // println!("{:?}", board.bfs_white);
@@ -71,16 +72,22 @@ impl Mcts {
                 //     "{} {} {:?}",
                 //     board.bfs_white.queue_i, board.bfs_white.queue_end, board.bfs_white.queue
                 // );
-                depth += 1;
-                visited.insert(node.id, visited.get(&node.id).cloned().unwrap_or(0) + 1);
-                let (m, child) = node.pick_move(self, &board, &visited, true);
-                stack.push(child);
-                node = self.nodes.get(&child).unwrap().clone();
-                finished = node.finished;
+                let store = depth < 4;
+                let (m, child) = node.pick_move(self, &board, &visited, true, store);
+                if store {
+                    stack.push(child);
+                    node = self.nodes.get(&child).unwrap().clone();
+                    visited.insert(node.id, visited.get(&node.id).cloned().unwrap_or(0) + 1);
+                    finished = node.finished;
+                }
 
                 board.play_move(m);
 
-                if stack.len() > 128 {
+                if !store {
+                    finished = game_winner(&board.game) != None;
+                }
+
+                if depth > 8 {
                     break;
                     println!("{:?}", board.game);
                     println!("{:?}", board.bfs_white.dir);
@@ -98,9 +105,20 @@ impl Mcts {
                     }
                     panic!();
                 }
+                total_depth += 1;
+                depth += 1;
             }
 
-            let winner = game_winner(&board.game);
+            //let winner = game_winner(&board.game);
+            let winner = if board.bfs_white.dir.1 == board.bfs_black.dir.1 {
+                None
+            } else {
+                if board.bfs_white.dir.1 < board.bfs_black.dir.1 {
+                    Some(Player::White)
+                } else {
+                    Some(Player::Black)
+                }
+            };
             if winner == None {
                 for n in stack.into_iter() {
                     let no = self.nodes.get_mut(&n).unwrap();
@@ -131,10 +149,10 @@ impl Mcts {
                 "c", c.wins, c.games, m, c.self_dist, c.other_dist
             );
         }
-        println!("sims: {}, avg. depth: {}", sims, depth / sims);
+        println!("sims: {}, avg. depth: {}", sims, total_depth / sims);
 
         let board = Board::from(root_game);
-        root.pick_move(self, &board, &HashMap::<u64, usize>::new(), false)
+        root.pick_move(self, &board, &HashMap::<u64, usize>::new(), false, true)
             .0
     }
 }
