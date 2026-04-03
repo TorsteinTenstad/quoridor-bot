@@ -49,7 +49,8 @@ impl Node {
             .map(|(m, self_dist, other_dist)| {
                 let game = execute_move_unchecked(&board.game, &m);
 
-                let hash = ts.add_node(&game, Some(self_dist), Some(other_dist));
+                // Dists swapped as execute_move_unchecked swaps player.
+                let hash = ts.add_node(&game, Some(other_dist), Some(self_dist));
                 (m, hash)
             })
             .collect();
@@ -87,11 +88,11 @@ impl Node {
                     if explore {
                         child.score(self.games)
                             - 1000f64 * (visited.get(hash).cloned().unwrap_or(0) as f64)
-                            - (child.self_dist.unwrap_or(0) as f64) / 20f64
-                        // + (child.other_dist.unwrap_or(0) as f64) / 40f64
+                            + (child.self_dist.unwrap_or(0) as f64)
+                            - (child.other_dist.unwrap_or(0) as f64)
                     } else {
-                        -child.q() - (child.self_dist.unwrap_or(0) as f64) / 20f64
-                        // + (child.other_dist.unwrap_or(0) as f64) / 40f64
+                        -child.q() + (child.self_dist.unwrap_or(0) as f64)
+                            - (child.other_dist.unwrap_or(0) as f64)
                     },
                     m,
                     hash,

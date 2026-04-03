@@ -62,6 +62,7 @@ impl Board {
                     if self.bfs_white.dir.0 == PathBlock::Unreachable {
                         self.bfs_white.re_bfs(&self.game);
                     } else {
+                        self.bfs_white.recalculate_path(&self.game);
                     }
                 }
                 if player == Player::Black {
@@ -72,6 +73,8 @@ impl Board {
                     );
                     if self.bfs_black.dir.0 == PathBlock::Unreachable {
                         self.bfs_black.re_bfs(&self.game);
+                    } else {
+                        self.bfs_black.recalculate_path(&self.game);
                     }
                 }
             }

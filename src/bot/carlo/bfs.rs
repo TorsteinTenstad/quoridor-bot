@@ -267,6 +267,28 @@ impl Bfs {
             return;
         }
 
+        self.recalculate_path(game);
+
+        self.queue = queue;
+        self.queue_i = i;
+        self.queue_count = queue_len - i;
+
+        while in_queue_count > 0 {
+            self.queue[self.queue_i] = in_queue[in_queue_i];
+            self.queue_i = (self.queue_i + 1) % (PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT);
+            self.queue_count += 1;
+            in_queue_i = (in_queue_i + 1) % (PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT);
+            in_queue_count -= 1;
+        }
+    }
+
+    pub fn recalculate_path(&mut self, game: &Game) {
+        let player_pos = game.board.player_position(self.player);
+
+        if self.path[player_pos.y][player_pos.x].0 == PathBlock::Unreachable {
+            return;
+        }
+
         let mut xx = player_pos.x;
         let mut yy = player_pos.y;
         let mut d = self.path[yy][xx].1;
@@ -283,7 +305,6 @@ impl Bfs {
                     println!("{:?}", self);
                     println!("xy {} {}", player_pos.x, player_pos.y);
                     println!("xy {} {}", xx, yy);
-                    println!("{:?}", queued);
                     panic!("unexpected unreachable")
                 }
             };
@@ -291,18 +312,6 @@ impl Bfs {
             yy = (yy as isize + dy) as usize;
             self.on_path[yy][xx] = true;
             d = self.path[yy][xx].1;
-        }
-
-        self.queue = queue;
-        self.queue_i = i;
-        self.queue_count = queue_len - i;
-
-        while in_queue_count > 0 {
-            self.queue[self.queue_i] = in_queue[in_queue_i];
-            self.queue_i = (self.queue_i + 1) % (PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT);
-            self.queue_count += 1;
-            in_queue_i = (in_queue_i + 1) % (PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT);
-            in_queue_count -= 1;
         }
     }
 
@@ -342,12 +351,12 @@ impl Bfs {
         }
 
         self.invalidate(game);
-        self.re_bfs(game);
 
-        // if self.dir.0 != PathBlock::Unreachable {
-        //     // Blocked path does not affect players shortest path.
-        //     return;
-        // }
+        if self.dir.0 != PathBlock::Unreachable {
+            // Blocked path does not affect players shortest path.
+            return;
+        }
+        self.re_bfs(game);
     }
 
     pub fn re_bfs(&mut self, game: &Game) {
@@ -455,7 +464,7 @@ impl Bfs {
         queue: [(i8, i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT],
         queue_len: usize,
     ) {
-        // print!("exx: ");
+        // print!("exx: {} {}", self.queue_count, queue_len);
         // for ji in 0..self.queue_count {
         //     let j = (self.queue_i + ji) % (PIECE_GRID_HEIGHT * PIECE_GRID_WIDTH);
         //     print!(

@@ -70,7 +70,17 @@ impl Mcts {
                 //     "{} {} {:?}",
                 //     board.bfs_white.queue_i, board.bfs_white.queue_end, board.bfs_white.queue
                 // );
-                if stack.len() > 20000 {
+                depth += 1;
+                visited.insert(node.id, visited.get(&node.id).cloned().unwrap_or(0) + 1);
+                let (m, child) = node.pick_move(self, &board, &visited, true);
+                stack.push(child);
+                node = self.nodes.get(&child).unwrap().clone();
+                finished = node.finished;
+
+                board.play_move(m);
+
+                if stack.len() > 64 {
+                    break;
                     println!("{:?}", board.game);
                     println!("{:?}", board.bfs_white.dir);
                     println!("{:?}", board.bfs_white);
@@ -87,25 +97,26 @@ impl Mcts {
                     }
                     panic!();
                 }
-                depth += 1;
-                visited.insert(node.id, visited.get(&node.id).cloned().unwrap_or(0) + 1);
-                let (m, child) = node.pick_move(self, &board, &visited, true);
-                stack.push(child);
-                node = self.nodes.get(&child).unwrap().clone();
-                finished = node.finished;
-
-                board.play_move(m);
             }
 
-            let mut win = game_winner(&board.game) == Some(root_game.player);
-            for n in stack.into_iter() {
-                let no = self.nodes.get_mut(&n).unwrap();
-                if win {
+            let winner = game_winner(&board.game);
+            if winner == None {
+                for n in stack.into_iter() {
+                    let no = self.nodes.get_mut(&n).unwrap();
                     no.wins += 1;
+                    no.games += 2;
                 }
-                no.games += 1;
+            } else {
+                let mut win = winner == Some(root_game.player);
+                for n in stack.into_iter() {
+                    let no = self.nodes.get_mut(&n).unwrap();
+                    if win {
+                        no.wins += 1;
+                    }
+                    no.games += 1;
 
-                win = !win;
+                    win = !win;
+                }
             }
         }
 
