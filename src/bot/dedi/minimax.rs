@@ -31,7 +31,7 @@ enum CacheFlag {
 #[derive(Clone)]
 pub struct CacheLine {
     depth: usize,
-    play: Option<PlayerMove>,
+    play: PlayerMove,
     h: isize,
     flag: CacheFlag,
 }
@@ -50,6 +50,9 @@ pub fn minimax_iterative(game: &Game, duration: Duration, cache: &mut Cache) -> 
         match minimax(game, depth, deadline, cache) {
             Some((_move, h)) => {
                 println!("Depth {:?}: found {:?} with h={:?}", depth, _move, h);
+                if _move == None {
+                    break;
+                }
                 best_move = _move;
                 depth += 1;
                 if h >= INF || h <= -INF {
@@ -109,17 +112,17 @@ fn _minimax(
     if let Some(line) = cache.table.get(&hash).cloned() {
         if line.depth >= depth {
             match line.flag {
-                CacheFlag::Exact => return Some((line.play, line.h)),
+                CacheFlag::Exact => return Some((Some(line.play), line.h)),
                 CacheFlag::Lower => alpha = alpha.max(line.h),
                 CacheFlag::Upper => {
                     let beta = beta.min(line.h);
                     if alpha >= beta {
-                        return Some((line.play, line.h));
+                        return Some((Some(line.play), line.h));
                     }
                 }
             }
             if alpha >= beta {
-                return Some((line.play, line.h));
+                return Some((Some(line.play), line.h));
             }
         }
     }
@@ -143,10 +146,11 @@ fn _minimax(
             .collect();
 
     if moves.is_empty() {
-        return Some((None, -INF));
+        unreachable!("no valid moves");
     }
 
-    let cached_best = cache.table.get(&hash).and_then(|l| l.play.clone());
+    let cached_best = cache.table.get(&hash).and_then(|l| Some(l.play.clone()));
+
     moves.sort_by_key(|(mv, b1, b2)| {
         if cached_best.as_ref() == Some(mv) {
             return isize::MIN;
@@ -170,7 +174,7 @@ fn _minimax(
 
     let original_alpha = alpha;
     let mut best_score = -INF;
-    let mut best_move: Option<PlayerMove> = None;
+    let mut best_move = moves[0].0.clone();
 
     for (_move, b1, b2) in moves {
         let game_next = execute_move_unchecked(game, &_move);
@@ -188,7 +192,7 @@ fn _minimax(
                 let h = -h_child;
                 if h > best_score {
                     best_score = h;
-                    best_move = Some(_move);
+                    best_move = _move;
                 }
                 alpha = alpha.max(best_score);
                 if alpha >= beta {
@@ -217,7 +221,7 @@ fn _minimax(
         },
     );
 
-    Some((best_move, best_score))
+    Some((Some(best_move), best_score))
 }
 
 fn target(player: Player) -> usize {
