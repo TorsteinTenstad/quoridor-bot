@@ -74,12 +74,12 @@ pub enum Tile {
 impl Debug for Tile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Tile::Invalid => write!(f, "⊗ "),
-            Tile::Valid(Dir::PosX, _) => write!(f, "🠊 "),
-            Tile::Valid(Dir::PosY, _) => write!(f, "🠋 "),
-            Tile::Valid(Dir::NegX, _) => write!(f, "🠈 "),
-            Tile::Valid(Dir::NegY, _) => write!(f, "🠉 "),
-            Tile::Valid(Dir::None, _) => write!(f, "⊙ "),
+            Tile::Invalid => write!(f, "⊗   "),
+            Tile::Valid(Dir::PosX, dis) => write!(f, "🠊 {:?}", dis),
+            Tile::Valid(Dir::PosY, dis) => write!(f, "🠋 {:?}", dis),
+            Tile::Valid(Dir::NegX, dis) => write!(f, "🠈 {:?}", dis),
+            Tile::Valid(Dir::NegY, dis) => write!(f, "🠉 {:?}", dis),
+            Tile::Valid(Dir::None, dis) => write!(f, "⊙ {:?}", dis),
         }
     }
 }
@@ -222,9 +222,9 @@ pub fn get_wall_moves(
     }
     let mut game = game.clone();
 
-    for y in 0..WALL_GRID_HEIGHT {
-        for x in 0..WALL_GRID_WIDTH {
-            for orientation in [WallOrientation::Horizontal, WallOrientation::Vertical] {
+    for orientation in [WallOrientation::Horizontal, WallOrientation::Vertical] {
+        for y in 0..WALL_GRID_HEIGHT {
+            for x in 0..WALL_GRID_WIDTH {
                 let position = WallPosition { x, y };
 
                 if wall_collide(&game.board.walls, orientation, &position) {
@@ -234,17 +234,19 @@ pub fn get_wall_moves(
                 let pos1 = game.board.player_position(p1).clone();
                 let pos2 = game.board.player_position(p2).clone();
 
-                if wall_untouched(&game.board.walls, orientation, &position) {
-                    wall_moves.push((
-                        PlayerMove::PlaceWall {
-                            orientation,
-                            position,
-                        },
-                        board_p1.clone(),
-                        board_p2.clone(),
-                    ));
-                    continue;
-                }
+                // TODO: this works for wall placement, but won't keep the board valid.
+
+                // if wall_untouched(&game.board.walls, orientation, &position) {
+                //     wall_moves.push((
+                //         PlayerMove::PlaceWall {
+                //             orientation,
+                //             position,
+                //         },
+                //         board_p1.clone(),
+                //         board_p2.clone(),
+                //     ));
+                //     continue;
+                // }
 
                 let board_p1_new = board_after_wall(&mut game, &board_p1, x, y, &orientation);
                 match board_p1_new.tiles[pos1.y][pos1.x] {

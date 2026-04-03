@@ -8,7 +8,7 @@ use crate::{
         WallOrientation,
     },
     game_logic::{
-        all_move_piece_moves, execute_move_unchecked, is_move_piece_legal_with_players_at_positions,
+        all_move_piece_moves, execute_move_unchecked, new_position_after_move_piece_unchecked,
     },
 };
 use arrayvec::ArrayVec;
@@ -32,6 +32,9 @@ pub fn minimax_iterative(game: &Game, duration: Duration, cache: &mut Cache) -> 
             depth += 1;
             if h == INF || h == -INF {
                 break;
+            }
+            if depth > 12 {
+                break; // stack overflow for some reason
             }
         } else {
             break;
@@ -135,22 +138,22 @@ fn _minimax(
         return Some((None, -INF));
     }
 
-    moves.sort_by(|i, j| {
-        let h_i = match i.2.tiles[pos_p2.y][pos_p2.x] {
-            Tile::Valid(_, dis) => dis,
-            _ => unreachable!(),
-        } - match i.1.tiles[pos_p1.y][pos_p1.x] {
-            Tile::Valid(_, dis) => dis,
-            _ => unreachable!(),
+    moves.sort_by_key(|board| {
+        let pos_p1 = match board.0.clone() {
+            PlayerMove::MovePiece(mp) => {
+                &new_position_after_move_piece_unchecked(pos_p1, &mp, pos_p2)
+            }
+            _ => pos_p1,
         };
-        let h_j = match j.2.tiles[pos_p2.y][pos_p2.x] {
+        let a = match board.1.tiles[pos_p1.y][pos_p1.x] {
             Tile::Valid(_, dis) => dis,
             _ => unreachable!(),
-        } - match j.1.tiles[pos_p1.y][pos_p1.x] {
+        } as isize;
+        let b = match board.2.tiles[pos_p2.y][pos_p2.x] {
             Tile::Valid(_, dis) => dis,
             _ => unreachable!(),
-        };
-        h_j.partial_cmp(&h_i).unwrap_or(std::cmp::Ordering::Equal)
+        } as isize;
+        a - b
     });
 
     let mut alpha = alpha;
