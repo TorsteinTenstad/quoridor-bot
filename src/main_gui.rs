@@ -9,6 +9,7 @@ use lib::{
     commands::{Command, execute_command, get_legal_command},
     data_model::{Game, Player},
     draw,
+    game_logic::player_has_won,
     session::Session,
 };
 use std::{
@@ -83,6 +84,11 @@ fn main() {
         let mut session: Session = Session::default();
         loop {
             if ctrl_c.load(Ordering::Relaxed) {
+                input_type_white = InputType::Manual;
+                input_type_black = InputType::Manual;
+            }
+            if let Some(winning_player) = player_has_won(&session.game.board) {
+                println!("{} has won!", winning_player.to_string());
                 input_type_white = InputType::Manual;
                 input_type_black = InputType::Manual;
             }

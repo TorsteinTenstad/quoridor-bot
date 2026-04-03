@@ -16,7 +16,10 @@ pub struct Args {
     pub abe_heuristic: Option<crate::bot::abe::heuristic::Heuristic>,
 
     #[arg(long)]
-    pub dedi_heuristic: Option<crate::bot::dedi::heuristic::Heuristic>,
+    pub dedi_heuristic_white: Option<crate::bot::dedi::heuristic::Heuristic>,
+
+    #[arg(long)]
+    pub dedi_heuristic_black: Option<crate::bot::dedi::heuristic::Heuristic>,
 
     #[arg(short = 'c', long, default_value_t = 1)]
     pub min_depth_for_caching: usize,

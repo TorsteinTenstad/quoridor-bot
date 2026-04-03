@@ -9,7 +9,7 @@ use crate::{
         Bot,
         dedi::{heuristic::Heuristic, minimax::Cache},
     },
-    data_model::{Game, PlayerMove},
+    data_model::{Game, Player, PlayerMove},
     session::Session,
 };
 
@@ -17,7 +17,7 @@ use crate::{
 pub struct Dedi {
     default_depth: Option<usize>,
     default_seconds: Option<u64>,
-    default_heuristic: Heuristic,
+    default_heuristics: [Heuristic; 2],
     cache: Cache,
 }
 
@@ -25,8 +25,11 @@ impl Dedi {
     pub fn init(&mut self, args: &args::Args) {
         self.default_depth = args.depth;
         self.default_seconds = args.seconds;
-        if let Some(h) = args.dedi_heuristic {
-            self.default_heuristic = h;
+        if let Some(h) = args.dedi_heuristic_white {
+            self.default_heuristics[Player::White.as_index()] = h;
+        }
+        if let Some(h) = args.dedi_heuristic_black {
+            self.default_heuristics[Player::Black.as_index()] = h;
         }
     }
 }
@@ -39,7 +42,13 @@ impl Bot for Dedi {
             .default_seconds
             .map(Duration::from_secs)
             .unwrap_or(DEFAULT_DURATION);
-        minimax::minimax_iterative(game, self.default_heuristic, duration, &mut self.cache).unwrap()
+        minimax::minimax_iterative(
+            game,
+            self.default_heuristics[game.player.as_index()],
+            duration,
+            &mut self.cache,
+        )
+        .unwrap()
     }
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
@@ -48,7 +57,7 @@ impl Bot for Dedi {
                 let duration = seconds.map(Duration::from_secs).unwrap_or(DEFAULT_DURATION);
                 let m = minimax::minimax_iterative(
                     &session.game,
-                    heuristic.unwrap_or(self.default_heuristic),
+                    heuristic.unwrap_or(self.default_heuristics[session.game.player.as_index()]),
                     duration,
                     &mut self.cache,
                 )

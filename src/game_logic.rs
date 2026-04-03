@@ -1,7 +1,7 @@
 use crate::{
     a_star::a_star,
     data_model::{
-        Direction, Game, MovePiece, PIECE_GRID_HEIGHT, PiecePosition, Player, PlayerMove,
+        Board, Direction, Game, MovePiece, PIECE_GRID_HEIGHT, PiecePosition, Player, PlayerMove,
         WALL_GRID_HEIGHT, WALL_GRID_WIDTH, WallOrientation, Walls,
     },
 };
@@ -33,6 +33,16 @@ pub fn execute_move_unchecked_inplace(game: &mut Game, player_move: &PlayerMove)
         }
     }
     game.player = player.opponent();
+}
+
+pub fn player_has_won(board: &Board) -> Option<Player> {
+    if board.player_position(Player::White).y == PIECE_GRID_HEIGHT - 1 {
+        Some(Player::White)
+    } else if board.player_position(Player::Black).y == 0 {
+        Some(Player::Black)
+    } else {
+        None
+    }
 }
 
 pub fn is_move_piece_legal(game: &Game, move_piece: &MovePiece) -> bool {

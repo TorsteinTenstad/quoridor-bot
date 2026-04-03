@@ -247,5 +247,5 @@ fn hash_to_u64<T: Hash>(value: &T) -> u64 {
 }
 
 fn heuristic_eval(heuristic: Heuristic, game: &Game, b1: &Board, b2: &Board) -> isize {
-    heuristic.eval(game, game.player, b1) - heuristic.eval(game, game.player.opponent(), b2)
+    heuristic.eval(game, game.player, b1, b2) - heuristic.eval(game, game.player.opponent(), b2, b1)
 }
