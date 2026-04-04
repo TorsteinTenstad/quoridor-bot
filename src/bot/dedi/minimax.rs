@@ -19,6 +19,8 @@ use std::{
 
 pub const INF: isize = isize::MAX - 1;
 
+const NULL_MOVE_R: usize = 2; // reduction factor
+
 #[derive(Clone, PartialEq)]
 enum CacheFlag {
     Exact,
@@ -83,7 +85,26 @@ pub fn minimax(
     let board_p2 = get_board(game, game.player.opponent());
     _minimax(
         game, depth, heuristic, -INF, INF, deadline, board_p1, board_p2, cache,
+        false, // did_null_move
     )
+}
+
+fn pass_turn(game: &Game) -> Game {
+    let mut g = game.clone();
+    g.player = g.player.opponent();
+    g
+}
+
+fn is_zugzwang(game: &Game) -> bool {
+    // Avoid null move when either player is within 2 rows of their goal —
+    // positions are forcing enough that passing could be catastrophically wrong.
+    let p1 = game.player;
+    let p2 = p1.opponent();
+    let pos_p1 = game.board.player_position(p1);
+    let pos_p2 = game.board.player_position(p2);
+    let close_p1 = (pos_p1.y as isize - target(p1) as isize).abs() <= 2;
+    let close_p2 = (pos_p2.y as isize - target(p2) as isize).abs() <= 2;
+    close_p1 || close_p2
 }
 
 fn _minimax(
@@ -96,13 +117,14 @@ fn _minimax(
     board_p1: Board,
     board_p2: Board,
     cache: &mut Cache,
+    did_null_move: bool,
 ) -> Option<(Option<PlayerMove>, isize)> {
     if deadline.is_some_and(|d| Instant::now() > d) {
         return None;
     }
 
     let p1 = game.player;
-    let p2 = game.player.opponent();
+    let p2 = p1.opponent();
     let pos_p1 = game.board.player_position(p1);
     let pos_p2 = game.board.player_position(p2);
 
@@ -114,8 +136,8 @@ fn _minimax(
     }
 
     let mut alpha = alpha;
-
     let hash = hash_to_u64(game);
+
     if let Some(line) = cache.table.get(&hash).cloned() {
         if line.depth >= depth {
             match line.flag {
@@ -139,6 +161,38 @@ fn _minimax(
         return Some((None, h));
     }
 
+    // ── Null move pruning ─────────────────────────────────────────────────────
+    if !did_null_move          // never two null moves in a row
+        && depth >= NULL_MOVE_R + 1
+        && beta < INF          // skip at root and during mate searches
+        && !is_zugzwang(game)
+    {
+        let game_null = pass_turn(game);
+        // board roles swap just like in a normal recursive call
+        let null_result = _minimax(
+            &game_null,
+            depth - NULL_MOVE_R - 1,
+            heuristic,
+            -beta,
+            -beta + 1, // null window: only need to know if score >= beta
+            deadline,
+            board_p2.clone(),
+            board_p1.clone(),
+            cache,
+            true, // did_null_move — prevent consecutive null moves
+        );
+
+        match null_result {
+            None => return None, // deadline exceeded
+            Some((_, null_score)) => {
+                if -null_score >= beta {
+                    return Some((None, beta)); // fail-hard cutoff
+                }
+            }
+        }
+    }
+
+    // ── Normal search ─────────────────────────────────────────────────────────
     let mut moves: ArrayVec<(PlayerMove, Board, Board), 136> =
         get_legal_piece_moves(game, game.player)
             .iter()
@@ -156,7 +210,7 @@ fn _minimax(
         unreachable!("no valid moves");
     }
 
-    let cached_best = cache.table.get(&hash).and_then(|l| Some(l.play.clone()));
+    let cached_best = cache.table.get(&hash).map(|l| l.play.clone());
 
     moves.sort_by_key(|(mv, b1, b2)| {
         if cached_best.as_ref() == Some(mv) {
@@ -195,6 +249,7 @@ fn _minimax(
             b2,
             b1,
             cache,
+            false, // reset null move flag for normal children
         ) {
             Some((_, h_child)) => {
                 let h = -h_child;
