@@ -1,12 +1,10 @@
-use std::collections::HashMap;
-
-use rand::{Rng, rng, seq::IteratorRandom};
-
 use crate::{
     bot::carlo::{board::Board, mcts},
     data_model::PlayerMove,
     game_logic::execute_move_unchecked,
 };
+use rand::{Rng, rng, seq::IteratorRandom};
+use std::collections::HashMap;
 
 #[derive(Default, Clone, Debug)]
 pub struct Node {
