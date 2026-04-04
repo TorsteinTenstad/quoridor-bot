@@ -95,18 +95,6 @@ fn pass_turn(game: &Game) -> Game {
     g
 }
 
-fn is_zugzwang(game: &Game) -> bool {
-    // Avoid null move when either player is within 2 rows of their goal —
-    // positions are forcing enough that passing could be catastrophically wrong.
-    let p1 = game.player;
-    let p2 = p1.opponent();
-    let pos_p1 = game.board.player_position(p1);
-    let pos_p2 = game.board.player_position(p2);
-    let close_p1 = (pos_p1.y as isize - target(p1) as isize).abs() <= 2;
-    let close_p2 = (pos_p2.y as isize - target(p2) as isize).abs() <= 2;
-    close_p1 || close_p2
-}
-
 fn _minimax(
     game: &Game,
     depth: usize,
@@ -161,14 +149,12 @@ fn _minimax(
         return Some((None, h));
     }
 
-    // ── Null move pruning ─────────────────────────────────────────────────────
+    // Null move pruning
     if !did_null_move          // never two null moves in a row
         && depth >= NULL_MOVE_R + 1
-        && beta < INF          // skip at root and during mate searches
-        && !is_zugzwang(game)
+        && beta < INF
     {
         let game_null = pass_turn(game);
-        // board roles swap just like in a normal recursive call
         let null_result = _minimax(
             &game_null,
             depth - NULL_MOVE_R - 1,
@@ -179,7 +165,7 @@ fn _minimax(
             board_p2.clone(),
             board_p1.clone(),
             cache,
-            true, // did_null_move — prevent consecutive null moves
+            true,
         );
 
         match null_result {
@@ -192,7 +178,6 @@ fn _minimax(
         }
     }
 
-    // ── Normal search ─────────────────────────────────────────────────────────
     let mut moves: ArrayVec<(PlayerMove, Board, Board), 136> =
         get_legal_piece_moves(game, game.player)
             .iter()
