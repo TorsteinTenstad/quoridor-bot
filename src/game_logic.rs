@@ -35,6 +35,24 @@ pub fn execute_move_unchecked_inplace(game: &mut Game, player_move: &PlayerMove)
     game.player = player.opponent();
 }
 
+pub fn undo_move(game: &mut Game, player_move: &PlayerMove, player_pos_prev: PiecePosition) {
+    let player = game.player.opponent();
+
+    match player_move {
+        PlayerMove::PlaceWall {
+            orientation: _,
+            position,
+        } => {
+            game.board.walls.0[position.x][position.y] = None;
+            game.walls_left[player.as_index()] += 1;
+        }
+        PlayerMove::MovePiece(_) => {
+            game.board.player_positions[player.as_index()] = player_pos_prev;
+        }
+    }
+    game.player = player;
+}
+
 pub fn player_has_won(board: &Board) -> Option<Player> {
     if board.player_position(Player::White).y == PIECE_GRID_HEIGHT - 1 {
         Some(Player::White)

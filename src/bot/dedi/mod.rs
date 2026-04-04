@@ -42,26 +42,22 @@ impl Bot for Dedi {
             .default_seconds
             .map(Duration::from_secs)
             .unwrap_or(DEFAULT_DURATION);
-        minimax::minimax_iterative(
-            game,
-            self.default_heuristics[game.player.as_index()],
-            duration,
-            &mut self.cache,
-        )
-        .unwrap()
+        let h = self.default_heuristics[game.player.as_index()];
+
+        let mut game = game.clone();
+        minimax::minimax_iterative(&mut game, h, duration, &mut self.cache).unwrap()
     }
 
     fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
         match cmd {
             DediCommand::Move { seconds, heuristic } => {
                 let duration = seconds.map(Duration::from_secs).unwrap_or(DEFAULT_DURATION);
-                let m = minimax::minimax_iterative(
-                    &session.game,
-                    heuristic.unwrap_or(self.default_heuristics[session.game.player.as_index()]),
-                    duration,
-                    &mut self.cache,
-                )
-                .unwrap();
+                let h =
+                    heuristic.unwrap_or(self.default_heuristics[session.game.player.as_index()]);
+                let mut game = session.game.clone();
+
+                let m =
+                    minimax::minimax_iterative(&mut game, h, duration, &mut self.cache).unwrap();
                 session.make_move(m);
             }
         }

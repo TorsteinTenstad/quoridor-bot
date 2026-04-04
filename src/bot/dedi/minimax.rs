@@ -7,7 +7,9 @@ use crate::{
         monte::monte::get_legal_piece_moves,
     },
     data_model::{Game, PIECE_GRID_HEIGHT, Player, PlayerMove},
-    game_logic::{execute_move_unchecked, new_position_after_move_piece_unchecked},
+    game_logic::{
+        execute_move_unchecked_inplace, new_position_after_move_piece_unchecked, undo_move,
+    },
 };
 use arrayvec::ArrayVec;
 use std::hash::{Hash, Hasher};
@@ -42,7 +44,7 @@ pub struct Cache {
 }
 
 pub fn minimax_iterative(
-    game: &Game,
+    game: &mut Game,
     heuristic: Heuristic,
     duration: Duration,
     cache: &mut Cache,
@@ -75,7 +77,7 @@ pub fn minimax_iterative(
 }
 
 pub fn minimax(
-    game: &Game,
+    game: &mut Game,
     depth: usize,
     heuristic: Heuristic,
     deadline: Option<Instant>,
@@ -89,14 +91,8 @@ pub fn minimax(
     )
 }
 
-fn pass_turn(game: &Game) -> Game {
-    let mut g = game.clone();
-    g.player = g.player.opponent();
-    g
-}
-
 fn _minimax(
-    game: &Game,
+    game: &mut Game,
     depth: usize,
     heuristic: Heuristic,
     alpha: isize,
@@ -113,8 +109,8 @@ fn _minimax(
 
     let p1 = game.player;
     let p2 = p1.opponent();
-    let pos_p1 = game.board.player_position(p1);
-    let pos_p2 = game.board.player_position(p2);
+    let pos_p1 = game.board.player_position(p1).clone();
+    let pos_p2 = game.board.player_position(p2).clone();
 
     if pos_p1.y == target(p1) {
         return Some((None, INF));
@@ -154,9 +150,9 @@ fn _minimax(
         && depth >= NULL_MOVE_R + 1
         && beta < INF
     {
-        let game_null = pass_turn(game);
+        game.player = game.player.opponent();
         let null_result = _minimax(
-            &game_null,
+            game,
             depth - NULL_MOVE_R - 1,
             heuristic,
             -beta,
@@ -167,6 +163,7 @@ fn _minimax(
             cache,
             true,
         );
+        game.player = game.player.opponent();
 
         match null_result {
             None => return None, // deadline exceeded
@@ -203,9 +200,9 @@ fn _minimax(
         }
         let pos_p1_next = match mv {
             PlayerMove::MovePiece(mp) => {
-                &new_position_after_move_piece_unchecked(pos_p1, mp, pos_p2)
+                &new_position_after_move_piece_unchecked(&pos_p1, mp, &pos_p2)
             }
-            _ => pos_p1,
+            _ => &pos_p1,
         };
         let a = match b1.tiles[pos_p1_next.y][pos_p1_next.x] {
             Tile::Valid(_, dis) => dis as isize,
@@ -223,9 +220,9 @@ fn _minimax(
     let mut best_move = moves[0].0.clone();
 
     for (_move, b1, b2) in moves {
-        let game_next = execute_move_unchecked(game, &_move);
-        match _minimax(
-            &game_next,
+        execute_move_unchecked_inplace(game, &_move);
+        let next = _minimax(
+            game,
             depth - 1,
             heuristic,
             -beta,
@@ -235,7 +232,10 @@ fn _minimax(
             b1,
             cache,
             false, // reset null move flag for normal children
-        ) {
+        );
+        undo_move(game, &_move, pos_p1.clone());
+
+        match next {
             Some((_, h_child)) => {
                 let h = -h_child;
                 if h > best_score {
@@ -247,7 +247,7 @@ fn _minimax(
                     break; // beta cutoff
                 }
             }
-            None => return None, // deadline exceeded
+            None => return None,
         }
     }
 
