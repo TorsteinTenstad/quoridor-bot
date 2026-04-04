@@ -1,5 +1,6 @@
 mod bfs;
 mod board;
+mod buffer;
 mod mcts;
 mod node;
 

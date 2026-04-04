@@ -1,8 +1,8 @@
+use super::buffer::Buffer;
 use crate::data_model::{
     Game, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, Player, WALL_GRID_HEIGHT, WALL_GRID_WIDTH,
     WallOrientation,
 };
-
 use std::fmt::Debug;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -77,15 +77,15 @@ impl Debug for Bfs {
     }
 }
 
+const SQUARES: usize = PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT;
+
 #[derive(Clone)]
 pub struct Bfs {
     pub dir: (PathBlock, usize),
     pub player: Player,
     pub path: [[(PathBlock, u8); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
     pub on_path: [[bool; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
-    pub queue: [(i8, i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT],
-    pub queue_i: usize,
-    pub queue_count: usize,
+    pub queue: Buffer<(i8, i8), SQUARES>,
     invalid_q: [(i8, i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT],
     invalid_q_i: usize,
     invalid_q_len: usize,
@@ -94,8 +94,7 @@ pub struct Bfs {
 impl From<&Game> for Bfs {
     fn from(game: &Game) -> Self {
         let mut path = [[(PathBlock::Unreachable, 255); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
-        let mut queue = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
-        let mut queue_count = 0;
+        let mut queue: Buffer<(i8, i8), 81> = Buffer::<(i8, i8), SQUARES>::default();
 
         {
             let y = match game.player {
@@ -104,8 +103,7 @@ impl From<&Game> for Bfs {
             };
             for x in 0..PIECE_GRID_HEIGHT {
                 path[y][x] = (PathBlock::Goal, 0);
-                queue[queue_count] = (x as i8, y as i8);
-                queue_count += 1;
+                queue.insert((x as i8, y as i8));
             }
         }
 
@@ -115,8 +113,6 @@ impl From<&Game> for Bfs {
             dir: (PathBlock::Unreachable, 255),
             on_path: [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
             queue,
-            queue_i: 0,
-            queue_count,
             invalid_q: [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT],
             invalid_q_i: 0,
             invalid_q_len: 0,
@@ -130,9 +126,8 @@ impl From<&Game> for Bfs {
 impl Bfs {
     // Performs BFS search from the elements of the queue. Elements must be increasing in distance to goal.
     pub fn bfs(&mut self, game: &Game) {
-        let mut queue = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
+        let mut queue = Buffer::<(i8, i8), SQUARES>::default();
         let mut queued = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
-        let mut queue_len = 0;
 
         {
             let y = match self.player {
@@ -140,31 +135,22 @@ impl Bfs {
                 Player::White => PIECE_GRID_HEIGHT - 1,
             };
             for x in 0..PIECE_GRID_HEIGHT {
-                queue[queue_len] = (x as i8, y as i8);
-                queue_len += 1;
+                queue.insert((x as i8, y as i8));
                 queued[y][x] = true;
             }
         }
 
-        let in_queue = self.queue;
-        let mut in_queue_i = self.queue_i;
-        let mut in_queue_count = self.queue_count;
-
         let player_pos = game.board.player_position(self.player);
 
-        let mut i = 0;
         let mut iter_dist = 0;
-
-        for i in 0..in_queue_count {
-            let ii = (in_queue_i + i) % (PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT);
-            if self.path[in_queue[ii].1 as usize][in_queue[ii].0 as usize].0
-                != PathBlock::Unreachable
-            {
-                iter_dist = self.path[in_queue[ii].1 as usize][in_queue[ii].0 as usize].1;
+        for (x, y) in self.queue.iter() {
+            let p = self.path[*y as usize][*x as usize];
+            if p.0 != PathBlock::Unreachable {
+                iter_dist = p.1;
                 break;
             }
         }
-        'queue: while i < queue_len || in_queue_count > 0 {
+        'queue: while queue.non_empty() || self.queue.non_empty() {
             // println!("pd: {}", iter_dist);
             // print!("q: ");
             // for j in i..queue_len {
@@ -186,26 +172,21 @@ impl Bfs {
             // }
             // println!("\n");
 
-            while in_queue_count > 0
-                && (i == queue_len
-                    || self.path[in_queue[in_queue_i].1 as usize][in_queue[in_queue_i].0 as usize]
-                        .1
-                        == iter_dist)
+            let (head_x, head_y) = {
+                let (x, y) = self.queue.peek_first();
+                (*x as usize, *y as usize)
+            };
+            while self.queue.non_empty()
+                && (queue.empty() || self.path[head_y][head_x].1 == iter_dist)
             {
-                if self.path[in_queue[in_queue_i].1 as usize][in_queue[in_queue_i].0 as usize].0
-                    != PathBlock::Unreachable
-                    && !queued[in_queue[in_queue_i].1 as usize][in_queue[in_queue_i].0 as usize]
-                {
-                    iter_dist = self.path[in_queue[in_queue_i].1 as usize]
-                        [in_queue[in_queue_i].0 as usize]
-                        .1;
+                let (xi, yi) = self.queue.pop_first();
+                let (x, y) = (xi as usize, yi as usize);
+                if self.path[y][x].0 != PathBlock::Unreachable && !queued[y][x] {
+                    iter_dist = self.path[y][x].1;
 
-                    queued[in_queue[in_queue_i].1 as usize][in_queue[in_queue_i].0 as usize] = true;
-                    queue[queue_len] = in_queue[in_queue_i];
-                    queue_len += 1;
+                    queued[y][x] = true;
+                    queue.insert((xi, yi));
                 }
-                in_queue_i = (in_queue_i + 1) % (PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT);
-                in_queue_count -= 1;
             }
 
             // println!("d: {}", iter_dist);
@@ -228,11 +209,11 @@ impl Bfs {
             // }
             // println!("\n");
 
-            let (x, y) = queue[i];
+            let (x, y) = queue.pop_first();
             if self.path[y as usize][x as usize].0 == PathBlock::Unreachable {
-                i += 1;
                 continue;
             }
+
             for (dx, dy) in board_neighbors_unchecked(x, y) {
                 let nx = x + dx;
                 let ny = y + dy;
@@ -249,8 +230,7 @@ impl Bfs {
                 let dir = PathBlock::Dir(Dir::from((dx, dy)).reverse());
                 self.path[ny as usize][nx as usize] = (dir, dist);
 
-                queue[queue_len] = (nx, ny);
-                queue_len += 1;
+                queue.insert((nx, ny));
 
                 if nx as usize == player_pos.x && ny as usize == player_pos.y {
                     self.dir = (dir, dist as usize);
@@ -263,8 +243,6 @@ impl Bfs {
                 iter_dist = dist;
                 queued[ny as usize][nx as usize] = true;
             }
-
-            i += 1;
         }
 
         if self.path[player_pos.y][player_pos.x].0 == PathBlock::Unreachable {
@@ -273,17 +251,10 @@ impl Bfs {
 
         self.recalculate_path(game);
 
-        self.queue = queue;
-        self.queue_i = i;
-        self.queue_count = queue_len - i;
-
-        while in_queue_count > 0 {
-            self.queue[self.queue_i] = in_queue[in_queue_i];
-            self.queue_i = (self.queue_i + 1) % (PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT);
-            self.queue_count += 1;
-            in_queue_i = (in_queue_i + 1) % (PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT);
-            in_queue_count -= 1;
+        while !self.queue.empty() {
+            queue.insert(self.queue.pop_first());
         }
+        self.queue = queue;
     }
 
     pub fn recalculate_path(&mut self, game: &Game) {
@@ -495,68 +466,55 @@ impl Bfs {
         // println!("");
 
         let mut queued = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
+        let mut merged = Buffer::<(i8, i8), SQUARES>::default();
 
-        let mut merged = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
-        let mut merged_len = 0;
         let mut j = 0;
+        while self.queue.non_empty() && j < queue_len {
+            let (head_x, head_y) = {
+                let (x, y) = self.queue.peek_first();
+                (*x as usize, *y as usize)
+            };
 
-        while self.queue_count > 0 && j < queue_len {
-            if self.path[self.queue[self.queue_i].1 as usize][self.queue[self.queue_i].0 as usize].1
-                < self.path[queue[j].1 as usize][queue[j].0 as usize].1
-            {
-                if !queued[self.queue[self.queue_i].1 as usize][self.queue[self.queue_i].0 as usize]
-                    && self.path[self.queue[self.queue_i].1 as usize]
-                        [self.queue[self.queue_i].0 as usize]
-                        .0
-                        != PathBlock::Unreachable
-                {
-                    queued[self.queue[self.queue_i].1 as usize]
-                        [self.queue[self.queue_i].0 as usize] = true;
-                    merged[merged_len] = self.queue[self.queue_i];
-                    merged_len += 1;
+            if self.path[head_y][head_x].1 < self.path[queue[j].1 as usize][queue[j].0 as usize].1 {
+                let (xi, yi) = self.queue.pop_first();
+
+                let (x, y) = (xi as usize, yi as usize);
+                if !queued[y][x] && self.path[y][x].0 != PathBlock::Unreachable {
+                    queued[y][x] = true;
+                    merged.insert((xi, yi));
                 }
-                self.queue_i = (self.queue_i + 1) % (PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT);
-                self.queue_count -= 1;
             } else {
-                if !queued[queue[j].1 as usize][queue[j].0 as usize]
-                    && self.path[queue[j].1 as usize][queue[j].0 as usize].0
-                        != PathBlock::Unreachable
-                {
-                    queued[queue[j].1 as usize][queue[j].0 as usize] = true;
-                    merged[merged_len] = queue[j];
-                    merged_len += 1;
-                }
+                let (xi, yi) = queue[j];
                 j += 1;
+
+                let (x, y) = (xi as usize, yi as usize);
+                if !queued[y][x] && self.path[y][x].0 != PathBlock::Unreachable {
+                    queued[y][x] = true;
+                    merged.insert((xi, yi));
+                }
             }
         }
-        while self.queue_count > 0 {
-            if !queued[self.queue[self.queue_i].1 as usize][self.queue[self.queue_i].0 as usize]
-                && self.path[self.queue[self.queue_i].1 as usize]
-                    [self.queue[self.queue_i].0 as usize]
-                    .0
-                    != PathBlock::Unreachable
-            {
-                queued[self.queue[self.queue_i].1 as usize][self.queue[self.queue_i].0 as usize] =
-                    true;
-                merged[merged_len] = self.queue[self.queue_i];
-                merged_len += 1;
+        while self.queue.non_empty() {
+            let (xi, yi) = self.queue.pop_first();
+
+            let (x, y) = (xi as usize, yi as usize);
+            if !queued[y][x] && self.path[y][x].0 != PathBlock::Unreachable {
+                queued[y][x] = true;
+                merged.insert((xi, yi));
             }
-            self.queue_i = (self.queue_i + 1) % (PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT);
-            self.queue_count -= 1;
         }
         while j < queue_len {
-            if !queued[queue[j].1 as usize][queue[j].0 as usize]
-                && self.path[queue[j].1 as usize][queue[j].0 as usize].0 != PathBlock::Unreachable
-            {
-                queued[queue[j].1 as usize][queue[j].0 as usize] = true;
-                merged[merged_len] = queue[j];
-                merged_len += 1;
-            }
+            let (xi, yi) = queue[j];
             j += 1;
+
+            let (x, y) = (xi as usize, yi as usize);
+            if !queued[y][x] && self.path[y][x].0 != PathBlock::Unreachable {
+                queued[y][x] = true;
+                merged.insert((xi, yi));
+            }
         }
+
         self.queue = merged;
-        self.queue_i = 0;
-        self.queue_count = merged_len;
 
         // print!("res: ");
         // let mut j = self.queue_i;
