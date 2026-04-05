@@ -51,7 +51,6 @@ impl Board {
         self.game = execute_move_unchecked(&self.game, &m);
         match m {
             PlayerMove::MovePiece(_) => {
-                // TODO: find new `dir` with BFS
                 let pos = self.game.board.player_position(player);
                 if player == Player::White {
                     self.bfs_white.invalidate(&self.game);
