@@ -1,16 +1,18 @@
 use crate::{
-    bot::carlo::{board::Board, mcts},
+    bot::carlo::{
+        board::{Board, BoardStats},
+        mcts,
+    },
     data_model::PlayerMove,
     game_logic::execute_move_unchecked,
 };
 use rand::Rng;
 use std::collections::HashSet;
 
-#[derive(Default, Clone, Debug)]
+#[derive(Debug, Default, Clone)]
 pub struct Node {
     pub id: u64,
-    pub self_dist: Option<usize>,
-    pub other_dist: Option<usize>,
+    pub stats: Option<BoardStats>,
     pub games: usize,
     pub wins: usize,
     pub finished: bool,
@@ -46,11 +48,11 @@ impl Node {
 
         let children: Vec<(PlayerMove, u64)> = board
             .moves()
-            .map(|(m, self_dist, other_dist)| {
+            .map(|(m, stats)| {
                 let game = execute_move_unchecked(&board.game, &m);
 
                 // Dists swapped as execute_move_unchecked swaps player.
-                let hash = ts.add_node(&game, Some(other_dist), Some(self_dist));
+                let hash = ts.add_node(&game, stats);
                 (m, hash)
             })
             .collect();

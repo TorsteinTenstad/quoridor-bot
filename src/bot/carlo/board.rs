@@ -17,6 +17,12 @@ pub struct Board {
     wall_moves: [[[bool; 2]; WALL_GRID_WIDTH]; WALL_GRID_HEIGHT],
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct BoardStats {
+    pub dist: [usize; 2],
+    pub walls: [usize; 2],
+}
+
 impl From<&Game> for Board {
     fn from(game: &Game) -> Self {
         // TODO: one redundant clone
@@ -91,7 +97,7 @@ impl Board {
         }
     }
 
-    pub fn moves(&self) -> impl Iterator<Item = (PlayerMove, usize, usize)> {
+    pub fn moves(&self) -> impl Iterator<Item = (PlayerMove, Option<BoardStats>)> {
         let player_moves = {
             let p1 = self.game.board.player_position(self.game.player);
             let p2 = self.game.board.player_position(self.game.player.opponent());
@@ -103,19 +109,39 @@ impl Board {
                 .map(|m| {
                     let pos = new_position_after_move_piece_unchecked(p1, &m, p2);
 
-                    let self_dist = match self.game.player {
-                        // min as worse position will be unexplored / max dist.
-                        Player::White => (self.bfs_white.path[pos.y][pos.x].1 as usize)
-                            .min(self.bfs_white.dir.1 + 1),
-                        Player::Black => (self.bfs_black.path[pos.y][pos.x].1 as usize)
-                            .min(self.bfs_black.dir.1 + 1),
-                    };
-                    let other_dist = match self.game.player {
-                        Player::White => self.bfs_black.dir.1,
+                    let white_dist = match self.game.player {
+                        Player::White => {
+                            if self.bfs_white.path[pos.y][pos.x].0 != PathBlock::Unreachable {
+                                self.bfs_white.path[pos.y][pos.x].1 as usize
+                            } else {
+                                // BFS terminates when reaching player - must continue.
+                                let mut b = self.clone();
+                                b.play_move(PlayerMove::MovePiece(m.clone()));
+                                b.bfs_white.dir.1 as usize
+                            }
+                        }
                         Player::Black => self.bfs_white.dir.1,
                     };
-                    //println!("{:?}", self.bfs_black.path);
-                    (PlayerMove::MovePiece(m), self_dist, other_dist)
+                    let black_dist = match self.game.player {
+                        Player::Black => {
+                            if self.bfs_black.path[pos.y][pos.x].0 != PathBlock::Unreachable {
+                                self.bfs_black.path[pos.y][pos.x].1 as usize
+                            } else {
+                                // BFS terminates when reaching player - must continue.
+                                let mut b = self.clone();
+                                b.play_move(PlayerMove::MovePiece(m.clone()));
+                                b.bfs_black.dir.1 as usize
+                            }
+                        }
+                        Player::White => self.bfs_black.dir.1,
+                    };
+                    (
+                        PlayerMove::MovePiece(m),
+                        Some(BoardStats {
+                            dist: [white_dist, black_dist],
+                            walls: self.game.walls_left,
+                        }),
+                    )
                 })
         };
 
@@ -140,29 +166,17 @@ impl Board {
                             let orientation =
                                 [WallOrientation::Horizontal, WallOrientation::Vertical][orient];
 
-                            let (valid, dist_w, dist_b) = self.valid_wall(x, y, orientation);
+                            let (valid, stats) = self.valid_wall(x, y, orientation);
                             if !valid {
                                 return None;
                             }
-
-                            let self_dist = if self.game.player == Player::White {
-                                dist_w
-                            } else {
-                                dist_b
-                            };
-                            let other_dist = if self.game.player == Player::White {
-                                dist_b
-                            } else {
-                                dist_w
-                            };
 
                             Some((
                                 PlayerMove::PlaceWall {
                                     orientation,
                                     position: WallPosition { x, y },
                                 },
-                                self_dist,
-                                other_dist,
+                                stats,
                             ))
                         })
                     })
@@ -176,22 +190,32 @@ impl Board {
         x: usize,
         y: usize,
         orientation: WallOrientation,
-    ) -> (bool, usize, usize) {
+    ) -> (bool, Option<BoardStats>) {
         let mut board = self.clone();
         board.place_wall(x, y, orientation);
+        board.game.walls_left[self.game.player.as_index()] -= 1;
 
         board
             .bfs_white
             .recalculate_bfs(&board.game, x, y, orientation);
+        if board.bfs_white.dir.0 == PathBlock::Unreachable {
+            return (false, None);
+        }
+
         board
             .bfs_black
             .recalculate_bfs(&board.game, x, y, orientation);
-
-        match (board.bfs_white.dir, board.bfs_black.dir) {
-            ((PathBlock::Unreachable, _), _) => (false, 255, 255),
-            (_, (PathBlock::Unreachable, _)) => (false, 255, 255),
-            ((_, dist_w), (_, dist_b)) => (true, dist_w, dist_b),
+        if board.bfs_black.dir.0 == PathBlock::Unreachable {
+            return (false, None);
         }
+
+        (
+            true,
+            Some(BoardStats {
+                dist: [board.bfs_white.dir.1, board.bfs_black.dir.1],
+                walls: board.game.walls_left,
+            }),
+        )
     }
 
     pub fn place_wall(&mut self, x: usize, y: usize, orientation: WallOrientation) {

@@ -1,6 +1,9 @@
 use super::node::Node;
 use crate::{
-    bot::carlo::{bfs::game_winner, board::Board},
+    bot::carlo::{
+        bfs::game_winner,
+        board::{Board, BoardStats},
+    },
     data_model::{Game, Player, PlayerMove},
 };
 use rand::{rng, seq::IteratorRandom};
@@ -18,12 +21,7 @@ pub struct Mcts {
 }
 
 impl Mcts {
-    pub fn add_node(
-        &mut self,
-        game: &Game,
-        self_dist: Option<usize>,
-        other_dist: Option<usize>,
-    ) -> u64 {
+    pub fn add_node(&mut self, game: &Game, stats: Option<BoardStats>) -> u64 {
         let mut hasher = DefaultHasher::new();
         game.hash(&mut hasher);
         let hash = hasher.finish();
@@ -34,8 +32,7 @@ impl Mcts {
 
         let mut node = Node::default();
         node.finished = game_winner(&game) != None;
-        node.self_dist = self_dist;
-        node.other_dist = other_dist;
+        node.stats = stats;
         node.id = hash;
 
         self.nodes.insert(hash, node);
@@ -43,7 +40,7 @@ impl Mcts {
     }
 
     fn get_node_by_state(&mut self, game: &Game) -> &mut Node {
-        let hash = self.add_node(game, None, None);
+        let hash = self.add_node(game, None);
         self.nodes.get_mut(&hash).expect("just added")
     }
 
@@ -101,10 +98,7 @@ impl Mcts {
                     println!("{}: {:?}", "r", self.nodes.get(&node.id).unwrap());
                     for (m, c) in self.children.get(&node.id).unwrap() {
                         let c = self.nodes.get(c).unwrap();
-                        println!(
-                            "{}: {}/{} {} d:{:?}-{:?}",
-                            "c", c.wins, c.games, m, c.self_dist, c.other_dist
-                        );
+                        println!("{}: {}/{} {}", "c", c.wins, c.games, m);
                     }
                     panic!();
                 }
@@ -147,10 +141,7 @@ impl Mcts {
         println!("{}: {:?}", "r", self.nodes.get(&root.id).unwrap());
         for (m, c) in self.children.get(&root.id).unwrap() {
             let c = self.nodes.get(c).unwrap();
-            println!(
-                "{}: {}/{} {} d:{:?}-{:?}",
-                "c", c.wins, c.games, m, c.self_dist, c.other_dist
-            );
+            println!("{}: {}/{} {} {:?}", "c", c.wins, c.games, m, c.stats);
         }
         println!("sims: {}, avg. depth: {}", sims, total_depth / sims);
 
