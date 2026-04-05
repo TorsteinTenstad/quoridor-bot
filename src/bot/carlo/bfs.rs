@@ -172,12 +172,14 @@ impl Bfs {
             // }
             // println!("\n");
 
-            let (head_x, head_y) = {
-                let (x, y) = self.queue.peek_first();
-                (*x as usize, *y as usize)
-            };
             while self.queue.non_empty()
-                && (queue.empty() || self.path[head_y][head_x].1 == iter_dist)
+                && (queue.empty() || {
+                    let (head_x, head_y) = {
+                        let (x, y) = self.queue.peek_first();
+                        (*x as usize, *y as usize)
+                    };
+                    self.path[head_y][head_x].1 == iter_dist
+                })
             {
                 let (xi, yi) = self.queue.pop_first();
                 let (x, y) = (xi as usize, yi as usize);

@@ -17,16 +17,28 @@ impl<T: Default + Clone + Copy, const N: usize> Default for Buffer<T, N> {
 
 impl<T: Copy, const N: usize> Buffer<T, N> {
     pub fn insert(&mut self, e: T) {
+        if self.len >= N {
+            panic!("insert into full buffer");
+        };
+
         let i = (self.i + self.len) % N;
         self.buf[i] = e;
-        self.len += 1
+        self.len += 1;
     }
 
     pub fn peek_first(&mut self) -> &T {
+        if self.len <= 0 {
+            panic!("peek empty buffer");
+        };
+
         &self.buf[self.i]
     }
 
     pub fn pop_first(&mut self) -> T {
+        if self.len <= 0 {
+            panic!("pop empty buffer");
+        };
+
         let e = self.buf[self.i];
         self.i = (self.i + 1) % N;
         self.len -= 1;
