@@ -3,8 +3,8 @@ use crate::{
     data_model::PlayerMove,
     game_logic::execute_move_unchecked,
 };
-use rand::{Rng, rng, seq::IteratorRandom};
-use std::collections::HashMap;
+use rand::Rng;
+use std::collections::HashSet;
 
 #[derive(Default, Clone, Debug)]
 pub struct Node {
@@ -68,16 +68,11 @@ impl Node {
         &mut self,
         ts: &mut mcts::Mcts,
         board: &Board,
-        visited: &HashMap<u64, usize>,
+        visited: &HashSet<u64>,
         explore: bool,
-        store: bool,
     ) -> (PlayerMove, u64) {
         if self.finished {
             panic!("cannot get move from finished game")
-        }
-
-        if !store {
-            return (board.moves().into_iter().choose(&mut rng()).unwrap().0, 0);
         }
 
         if ts.children.get(&self.id) == None {
@@ -88,6 +83,7 @@ impl Node {
             .get(&self.id)
             .expect("just expanded")
             .iter()
+            .filter(|(_, hash)| !visited.contains(hash))
             .map(|(m, hash)| {
                 let child = ts.nodes.get(hash).expect("all child nodes exists in tree");
                 //let d = f64::log2(self.games.max(1) as f64);
@@ -95,7 +91,6 @@ impl Node {
                 (
                     if explore {
                         child.score(self.games)
-                            - 1000f64 * (visited.get(hash).cloned().unwrap_or(0) as f64)
                             // + f64::sqrt((child.self_dist.unwrap_or(0) as f64) / d)
                             // - f64::sqrt((child.other_dist.unwrap_or(0) as f64) / d)
                             + r / 1000_f64

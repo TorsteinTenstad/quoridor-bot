@@ -1,11 +1,11 @@
+use super::node::Node;
 use crate::{
     bot::carlo::{bfs::game_winner, board::Board},
     data_model::{Game, Player, PlayerMove},
 };
-
-use super::node::Node;
+use rand::{rng, seq::IteratorRandom};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     hash::{DefaultHasher, Hash, Hasher},
     time::Duration,
 };
@@ -60,7 +60,7 @@ impl Mcts {
             let mut node = self.nodes.get(&root.id).unwrap().to_owned();
             let mut stack = vec![root.id];
             let mut board = root_board.clone();
-            let mut visited = HashMap::<u64, usize>::new();
+            let mut visited = HashSet::<u64>::new();
             let mut finished = node.finished;
             let mut depth = 0;
             while !finished {
@@ -72,11 +72,15 @@ impl Mcts {
                 //     board.bfs_white.queue_i, board.bfs_white.queue_end, board.bfs_white.queue
                 // );
                 let store = depth < 4;
-                let (m, child) = node.pick_move(self, &board, &visited, true, store);
+                let (m, child) = if store {
+                    node.pick_move(self, &board, &visited, true)
+                } else {
+                    (board.moves().into_iter().choose(&mut rng()).unwrap().0, 0)
+                };
                 if store {
                     stack.push(child);
                     node = self.nodes.get(&child).unwrap().clone();
-                    visited.insert(node.id, visited.get(&node.id).cloned().unwrap_or(0) + 1);
+                    visited.insert(node.id);
                     finished = node.finished;
                 }
 
@@ -151,7 +155,7 @@ impl Mcts {
         println!("sims: {}, avg. depth: {}", sims, total_depth / sims);
 
         let board = Board::from(root_game);
-        root.pick_move(self, &board, &HashMap::<u64, usize>::new(), false, true)
+        root.pick_move(self, &board, &HashSet::<u64>::new(), false)
             .0
     }
 }
