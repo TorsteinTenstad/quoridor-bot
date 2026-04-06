@@ -1,49 +1,9 @@
-use super::buffer::Buffer;
-use crate::data_model::{
-    Game, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, Player, WALL_GRID_HEIGHT, WALL_GRID_WIDTH,
-    WallOrientation,
+use super::{
+    board::{Dir, board_neighbors_unchecked, wall_blocks},
+    buffer::Buffer,
 };
+use crate::data_model::{Game, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, Player, WallOrientation};
 use std::fmt::Debug;
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Dir {
-    Left,
-    Right,
-    Up,
-    Down,
-}
-
-impl From<(i8, i8)> for Dir {
-    fn from(dxdy: (i8, i8)) -> Self {
-        match dxdy {
-            (-1, _) => Dir::Left,
-            (1, _) => Dir::Right,
-            (_, -1) => Dir::Up,
-            (_, 1) => Dir::Down,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl Dir {
-    pub fn reverse(&self) -> Dir {
-        match self {
-            Dir::Left => Dir::Right,
-            Dir::Right => Dir::Left,
-            Dir::Up => Dir::Down,
-            Dir::Down => Dir::Up,
-        }
-    }
-
-    pub fn delta(&self) -> (isize, isize) {
-        match self {
-            Dir::Left => (-1, 0),
-            Dir::Right => (1, 0),
-            Dir::Up => (0, -1),
-            Dir::Down => (0, 1),
-        }
-    }
-}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PathBlock {
@@ -69,9 +29,67 @@ impl Debug for Bfs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for row in self.path {
             for square in row {
-                let _ = write!(f, "{:3}{:?} ", square.1, square.0);
+                write!(f, "{:3}{:?} ", square.1, square.0).unwrap();
             }
-            let _ = writeln!(f);
+            writeln!(f).unwrap();
+        }
+        Ok(())
+    }
+}
+
+pub struct PrintableBfs {
+    game: Game,
+    bfs: Bfs,
+}
+
+impl Debug for PrintableBfs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for y in 0..PIECE_GRID_HEIGHT {
+            for x in 0..PIECE_GRID_WIDTH {
+                write!(f, "{:3}{:?}", self.bfs.path[y][x].1, self.bfs.path[y][x].0).unwrap();
+                let invalid_q = (0..self.bfs.invalid_q_len)
+                    .any(|i| self.bfs.invalid_q[i] == (x as i8, y as i8));
+                let mut filler = 0;
+                if invalid_q {
+                    write!(f, "i").unwrap();
+                } else {
+                    filler += 1;
+                }
+                let search_q = self
+                    .bfs
+                    .queue
+                    .iter()
+                    .any(|(a, b)| *a == (x as i8) && *b == (y as i8));
+                if search_q {
+                    write!(f, "s").unwrap();
+                } else {
+                    filler += 1;
+                }
+                if self.bfs.on_path[y][x] {
+                    write!(f, "p").unwrap();
+                } else {
+                    filler += 1;
+                }
+                for _ in 0..filler {
+                    write!(f, " ").unwrap();
+                }
+                if wall_blocks(&self.game, x as i8, y as i8, 1, 0) {
+                    write!(f, "|").unwrap();
+                } else {
+                    write!(f, " ").unwrap();
+                }
+            }
+            writeln!(f).unwrap();
+            if y < PIECE_GRID_HEIGHT - 1 {
+                for x in 0..PIECE_GRID_WIDTH {
+                    if wall_blocks(&self.game, x as i8, y as i8, 0, 1) {
+                        write!(f, "------- ").unwrap();
+                    } else {
+                        write!(f, "        ").unwrap();
+                    }
+                }
+                writeln!(f).unwrap();
+            }
         }
         Ok(())
     }
@@ -86,7 +104,7 @@ pub struct Bfs {
     pub path: [[(PathBlock, u8); PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
     pub on_path: [[bool; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
     pub queue: Buffer<(i8, i8), SQUARES>,
-    invalid_q: [(i8, i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT],
+    invalid_q: [(i8, i8); SQUARES],
     invalid_q_i: usize,
     invalid_q_len: usize,
 }
@@ -113,7 +131,7 @@ impl From<&Game> for Bfs {
             dir: (PathBlock::Unreachable, 255),
             on_path: [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT],
             queue,
-            invalid_q: [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT],
+            invalid_q: [(0_i8, 0_i8); SQUARES],
             invalid_q_i: 0,
             invalid_q_len: 0,
         };
@@ -124,6 +142,13 @@ impl From<&Game> for Bfs {
 }
 
 impl Bfs {
+    pub fn printable(&self, game: &Game) -> PrintableBfs {
+        PrintableBfs {
+            game: game.clone(),
+            bfs: self.clone(),
+        }
+    }
+
     // Performs BFS search from the elements of the queue. Elements must be increasing in distance to goal.
     pub fn bfs(&mut self, game: &Game) {
         let mut queue = Buffer::<(i8, i8), SQUARES>::default();
@@ -162,7 +187,7 @@ impl Bfs {
             // println!();
             // print!("i: ");
             // for j in 0..in_queue_count {
-            //     let jj = (in_queue_i + j) % (PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT);
+            //     let jj = (in_queue_i + j) % (SQUARES);
             //     print!(
             //         "{} ({},{}) ",
             //         self.path[in_queue[jj].1 as usize][in_queue[jj].0 as usize].1,
@@ -328,16 +353,17 @@ impl Bfs {
         }
 
         self.invalidate(game);
-
         if self.dir.0 != PathBlock::Unreachable {
             // Blocked path does not affect players shortest path.
             return;
         }
-        self.re_bfs(game);
+
+        self.seed_bfs(game);
+        self.bfs(game);
     }
 
-    pub fn re_bfs(&mut self, game: &Game) {
-        let mut border_q = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
+    pub fn seed_bfs(&mut self, game: &Game) {
+        let mut border_q = [(0_i8, 0_i8); SQUARES];
         let mut border_q_len = 0;
         let mut border_q_contains = [[false; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT];
 
@@ -376,7 +402,7 @@ impl Bfs {
             i += 1;
         }
 
-        let mut bfs_q = [(0_i8, 0_i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT];
+        let mut bfs_q = [(0_i8, 0_i8); SQUARES];
         let mut bfs_q_len = 0;
         // Sorted insert into seeded bfs queue.
         {
@@ -405,7 +431,6 @@ impl Bfs {
         self.invalid_q_i = 0;
         self.invalid_q_len = 0;
         self.insert_queue(bfs_q, bfs_q_len);
-        self.bfs(game);
     }
 
     pub fn invalidate(&mut self, game: &Game) {
@@ -442,11 +467,7 @@ impl Bfs {
         }
     }
 
-    fn insert_queue(
-        &mut self,
-        queue: [(i8, i8); PIECE_GRID_WIDTH * PIECE_GRID_HEIGHT],
-        queue_len: usize,
-    ) {
+    fn insert_queue(&mut self, queue: [(i8, i8); SQUARES], queue_len: usize) {
         // print!("exx: {} {}", self.queue_count, queue_len);
         // for ji in 0..self.queue_count {
         //     let j = (self.queue_i + ji) % (PIECE_GRID_HEIGHT * PIECE_GRID_WIDTH);
@@ -541,47 +562,4 @@ pub fn game_winner(game: &Game) -> Option<Player> {
         return Some(Player::Black);
     }
     None
-}
-
-/// Returns iterator over (dx, dy) for valid neighbors on the board.
-fn board_neighbors(game: &Game, x: i8, y: i8) -> impl Iterator<Item = (i8, i8)> {
-    board_neighbors_unchecked(x, y).filter(move |(dx, dy)| !wall_blocks(game, x, y, *dx, *dy))
-}
-
-fn board_neighbors_unchecked(x: i8, y: i8) -> impl Iterator<Item = (i8, i8)> {
-    [(-1, 0), (0, -1), (1, 0), (0, 1)]
-        .into_iter()
-        .filter(move |(dx, dy)| {
-            let nx = x + dx;
-            let ny = y + dy;
-
-            if nx < 0 || nx >= PIECE_GRID_WIDTH as i8 || ny < 0 || ny >= PIECE_GRID_HEIGHT as i8 {
-                // Invalid out of bounds move.
-                return false;
-            }
-
-            true
-        })
-}
-
-fn wall_blocks(game: &Game, x: i8, y: i8, dx: i8, dy: i8) -> bool {
-    let orientation = match (dx, dy) {
-        (0, _) => WallOrientation::Horizontal,
-        (_, 0) => WallOrientation::Vertical,
-        _ => unreachable!(),
-    };
-
-    let wall_xs = [x - 1 + (dx == 1) as i8, x - (dx == -1) as i8];
-    let wall_ys = [y - 1 + (dy == 1) as i8, y - (dy == -1) as i8];
-    for (wx, wy) in wall_xs.into_iter().zip(wall_ys.into_iter()) {
-        if wx < 0 || wx >= WALL_GRID_WIDTH as i8 || wy < 0 || wy >= WALL_GRID_HEIGHT as i8 {
-            // Out of bounds wall cannot exist / block movement.
-            continue;
-        }
-        if game.board.walls.0[wx as usize][wy as usize] == Some(orientation) {
-            return true;
-        }
-    }
-
-    false
 }

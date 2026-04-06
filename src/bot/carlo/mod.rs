@@ -1,6 +1,7 @@
 mod bfs;
 mod board;
 mod buffer;
+mod iter;
 mod mcts;
 mod node;
 

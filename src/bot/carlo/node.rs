@@ -7,7 +7,7 @@ use crate::{
     game_logic::execute_move_unchecked,
 };
 use rand::Rng;
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 #[derive(Debug, Default, Clone)]
 pub struct Node {
@@ -47,21 +47,14 @@ impl Node {
         }
 
         let children: Vec<(PlayerMove, u64)> = board
-            .moves()
+            .non_wait_moves()
             .map(|(m, stats)| {
                 let game = execute_move_unchecked(&board.game, &m);
 
-                // Dists swapped as execute_move_unchecked swaps player.
                 let hash = ts.add_node(&game, stats);
                 (m, hash)
             })
             .collect();
-
-        if children.len() == 0 {
-            println!("{:?}", board.game);
-            println!("{:?}", board.bfs_black);
-            println!("{:?}", board.bfs_white);
-        }
 
         ts.children.insert(self.id, children);
     }
@@ -70,35 +63,52 @@ impl Node {
         &mut self,
         ts: &mut mcts::Mcts,
         board: &Board,
-        visited: &HashSet<u64>,
+        visited: &HashMap<u64, usize>,
         explore: bool,
-    ) -> (PlayerMove, u64) {
+    ) -> Option<(PlayerMove, u64)> {
         if self.finished {
             panic!("cannot get move from finished game")
         }
-
         if ts.children.get(&self.id) == None {
             self.expand(ts, board);
         }
+
         let mut rand = rand::rng();
         ts.children
             .get(&self.id)
             .expect("just expanded")
             .iter()
-            .filter(|(_, hash)| !visited.contains(hash))
             .map(|(m, hash)| {
                 let child = ts.nodes.get(hash).expect("all child nodes exists in tree");
-                //let d = f64::log2(self.games.max(1) as f64);
+
+                // heuristic
+                let _ = match child.stats {
+                    Some(ref stats) => {
+                        let self_i = board.game.player.as_index();
+                        let other_i = 1 - self_i;
+
+                        if stats.dist[other_i] == 1 {
+                            -1000_f64
+                        } else {
+                            let delta_dist =
+                                (stats.dist[other_i] as isize - stats.dist[self_i] as isize) as f64;
+                            let delta_walls = (stats.walls[self_i] as isize
+                                - stats.walls[other_i] as isize)
+                                as f64;
+
+                            delta_dist + delta_walls * 1.5f64
+                        }
+                    }
+                    None => 0f64,
+                };
+
                 let r: f64 = rand.random();
                 (
                     if explore {
-                        child.score(self.games)
-                            // + f64::sqrt((child.self_dist.unwrap_or(0) as f64) / d)
-                            // - f64::sqrt((child.other_dist.unwrap_or(0) as f64) / d)
-                            + r / 1000_f64
+                        child.score(self.games) + r / 10000_f64
+                            - 10_f64 * *visited.get(hash).unwrap_or(&0) as f64
                     } else {
-                        -child.q() // + f64::sqrt((child.self_dist.unwrap_or(0) as f64) / d)
-                        // - f64::sqrt((child.other_dist.unwrap_or(0) as f64) / d)
+                        -child.q()
                     },
                     m,
                     hash,
@@ -106,6 +116,5 @@ impl Node {
             })
             .max_by(|(x, _, _), (y, _, _)| x.total_cmp(y))
             .map(|(_, m, hash)| (m.clone(), hash.clone()))
-            .expect("all non-final nodes have children")
     }
 }

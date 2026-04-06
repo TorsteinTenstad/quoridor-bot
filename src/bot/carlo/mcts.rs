@@ -8,7 +8,7 @@ use crate::{
 };
 use rand::{rng, seq::IteratorRandom};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     hash::{DefaultHasher, Hash, Hasher},
     time::Duration,
 };
@@ -46,7 +46,11 @@ impl Mcts {
 
     pub fn get_move(&mut self, root_game: &Game) -> PlayerMove {
         let mut root = self.get_node_by_state(root_game).clone();
-        let root_board = Board::from(root_game);
+        let mut root_board = Board::from(root_game);
+
+        // Don't bother calculating past x wall moves.
+        root_board.game.walls_left[0] = root_board.game.walls_left[0].min(4);
+        root_board.game.walls_left[1] = root_board.game.walls_left[1].min(4);
 
         let mut sims = 0;
         let mut total_depth = 0;
@@ -57,7 +61,7 @@ impl Mcts {
             let mut node = self.nodes.get(&root.id).unwrap().to_owned();
             let mut stack = vec![root.id];
             let mut board = root_board.clone();
-            let mut visited = HashSet::<u64>::new();
+            let mut visited = HashMap::<u64, usize>::new();
             let mut finished = node.finished;
             let mut depth = 0;
             while !finished {
@@ -68,16 +72,33 @@ impl Mcts {
                 //     "{} {} {:?}",
                 //     board.bfs_white.queue_i, board.bfs_white.queue_end, board.bfs_white.queue
                 // );
-                let store = depth < 4;
-                let (m, child) = if store {
+                let store = depth < 80000;
+                let mve = if store {
                     node.pick_move(self, &board, &visited, true)
                 } else {
-                    (board.moves().into_iter().choose(&mut rng()).unwrap().0, 0)
+                    Some((
+                        board
+                            .non_wait_moves()
+                            .into_iter()
+                            .choose(&mut rng())
+                            .unwrap()
+                            .0,
+                        0,
+                    ))
+                };
+                let (m, child) = match mve {
+                    Some((m, child)) => (m, child),
+                    None => {
+                        println!("{:?}", board.game);
+                        println!("{:?}", board.bfs_white.printable(&board.game));
+                        println!("{:?}", board.bfs_black.printable(&board.game));
+                        panic!();
+                    }
                 };
                 if store {
                     stack.push(child);
                     node = self.nodes.get(&child).unwrap().clone();
-                    visited.insert(node.id);
+                    visited.insert(node.id, visited.get(&node.id).unwrap_or(&0) + 1);
                     finished = node.finished;
                 }
 
@@ -87,8 +108,11 @@ impl Mcts {
                     finished = game_winner(&board.game) != None;
                 }
 
-                if depth > 8 {
-                    break;
+                // if depth > 32 {
+                //     break;
+                // }
+
+                if depth > 100000 {
                     println!("{:?}", board.game);
                     println!("{:?}", board.bfs_white.dir);
                     println!("{:?}", board.bfs_white);
@@ -96,9 +120,11 @@ impl Mcts {
                     println!("{:?}", board.bfs_black);
                     println!();
                     println!("{}: {:?}", "r", self.nodes.get(&node.id).unwrap());
-                    for (m, c) in self.children.get(&node.id).unwrap() {
-                        let c = self.nodes.get(c).unwrap();
-                        println!("{}: {}/{} {}", "c", c.wins, c.games, m);
+                    if store {
+                        for (m, c) in self.children.get(&node.id).unwrap() {
+                            let c = self.nodes.get(c).unwrap();
+                            println!("{}: {}/{} {}", "c", c.wins, c.games, m);
+                        }
                     }
                     panic!();
                 }
@@ -146,7 +172,8 @@ impl Mcts {
         println!("sims: {}, avg. depth: {}", sims, total_depth / sims);
 
         let board = Board::from(root_game);
-        root.pick_move(self, &board, &HashSet::<u64>::new(), false)
+        root.pick_move(self, &board, &HashMap::<u64, usize>::new(), false)
+            .expect("node has children")
             .0
     }
 }

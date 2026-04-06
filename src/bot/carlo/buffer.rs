@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Buffer<T, const N: usize> {
     buf: [T; N],
     i: usize,
