@@ -351,7 +351,7 @@ impl Bfs {
                 let nx = x + dx;
                 let ny = y + dy;
 
-                if self.path[ny as usize][nx as usize].0 != PathBlock::Unreachable {
+                if self.path[ny as usize][nx as usize].0 == PathBlock::Unreachable {
                     continue;
                 }
 
