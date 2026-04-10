@@ -76,15 +76,11 @@ impl Mcts {
                 let mve = if store {
                     node.pick_move(self, &board, &visited, true)
                 } else {
-                    Some((
-                        board
-                            .non_wait_moves()
-                            .into_iter()
-                            .choose(&mut rng())
-                            .unwrap()
-                            .0,
-                        0,
-                    ))
+                    board
+                        .non_wait_moves()
+                        .into_iter()
+                        .choose(&mut rng())
+                        .map(|m| (m.0, 0))
                 };
                 let (m, child) = match mve {
                     Some((m, child)) => (m, child),
