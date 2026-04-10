@@ -317,6 +317,43 @@ impl Bfs {
         }
     }
 
+    fn wall_blockings(
+        x: usize,
+        y: usize,
+        orientation: WallOrientation,
+    ) -> impl Iterator<Item = ((usize, usize), Dir)> {
+        [(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)]
+            .into_iter()
+            .zip(match orientation {
+                WallOrientation::Horizontal => [Dir::Down, Dir::Down, Dir::Up, Dir::Up],
+                WallOrientation::Vertical => [Dir::Right, Dir::Left, Dir::Right, Dir::Left],
+            })
+    }
+
+    pub fn wall_blocks_player_path(
+        &self,
+        game: &Game,
+        x: usize,
+        y: usize,
+        orientation: WallOrientation,
+    ) -> (bool, usize) {
+        let blocks = Self::wall_blockings(x, y, orientation).any(|((x, y), towards_wall)| {
+            self.path[y][x].0 == PathBlock::Dir(towards_wall)
+                && self.on_path[y as usize][x as usize]
+        });
+
+        if !blocks {
+            return (false, self.dir.1);
+        }
+
+        let mut bfs = self.clone();
+        let mut game = game.clone();
+        game.board.walls.0[x][y] = Some(orientation);
+
+        bfs.recalculate_bfs(&game, x, y, orientation);
+        return (bfs.dir.0 == PathBlock::Unreachable, bfs.dir.1);
+    }
+
     pub fn recalculate_bfs(
         &mut self,
         game: &Game,
@@ -324,31 +361,27 @@ impl Bfs {
         y: usize,
         orientation: WallOrientation,
     ) {
-        let mut can_skip = true;
+        let mut blocked_player = false;
         let player_pos = game.board.player_position(self.player);
 
-        for ((x, y), towards_wall) in [(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)]
-            .into_iter()
-            .zip(match orientation {
-                WallOrientation::Horizontal => [Dir::Down, Dir::Down, Dir::Up, Dir::Up],
-                WallOrientation::Vertical => [Dir::Right, Dir::Left, Dir::Right, Dir::Left],
-            })
-        {
-            if self.path[y][x].0 == PathBlock::Dir(towards_wall) {
-                self.invalid_q[self.invalid_q_len] = (x as i8, y as i8);
-                self.invalid_q_len += 1;
-                self.path[y as usize][x as usize] = (PathBlock::Unreachable, 255);
-                if x as usize == player_pos.x && y as usize == player_pos.y {
-                    self.dir = (PathBlock::Unreachable, 255);
-                }
+        for ((x, y), towards_wall) in Self::wall_blockings(x, y, orientation) {
+            if self.path[y][x].0 != PathBlock::Dir(towards_wall) {
+                continue;
+            }
 
-                if self.on_path[y as usize][x as usize] {
-                    can_skip = false;
-                }
+            self.invalid_q[self.invalid_q_len] = (x as i8, y as i8);
+            self.invalid_q_len += 1;
+            self.path[y as usize][x as usize] = (PathBlock::Unreachable, 255);
+            if x as usize == player_pos.x && y as usize == player_pos.y {
+                self.dir = (PathBlock::Unreachable, 255);
+            }
+
+            if self.on_path[y as usize][x as usize] {
+                blocked_player = true;
             }
         }
 
-        if can_skip {
+        if !blocked_player {
             return;
         }
 

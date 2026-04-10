@@ -263,29 +263,28 @@ impl Board {
         y: usize,
         orientation: WallOrientation,
     ) -> (bool, Option<BoardStats>) {
-        let mut board = self.clone();
-        board.place_wall(x, y, orientation);
-        board.game.walls_left[self.game.player.as_index()] -= 1;
-
-        board
-            .bfs_white
-            .recalculate_bfs(&board.game, x, y, orientation);
-        if board.bfs_white.dir.0 == PathBlock::Unreachable {
+        let (w_blockes, w_dist) =
+            self.bfs_white
+                .wall_blocks_player_path(&self.game, x, y, orientation);
+        if w_blockes {
             return (false, None);
         }
 
-        board
-            .bfs_black
-            .recalculate_bfs(&board.game, x, y, orientation);
-        if board.bfs_black.dir.0 == PathBlock::Unreachable {
+        let (b_blockes, b_dist) =
+            self.bfs_white
+                .wall_blocks_player_path(&self.game, x, y, orientation);
+        if b_blockes {
             return (false, None);
         }
+
+        let mut walls_left = self.game.walls_left.clone();
+        walls_left[self.game.player.as_index()] -= 1;
 
         (
             true,
             Some(BoardStats {
-                dist: [board.bfs_white.dir.1, board.bfs_black.dir.1],
-                walls: board.game.walls_left,
+                dist: [w_dist, b_dist],
+                walls: walls_left,
             }),
         )
     }
