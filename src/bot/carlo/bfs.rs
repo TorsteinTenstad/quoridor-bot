@@ -386,11 +386,6 @@ impl Bfs {
         }
 
         self.invalidate(game);
-        if self.dir.0 != PathBlock::Unreachable {
-            // Blocked path does not affect players shortest path.
-            return;
-        }
-
         self.seed_bfs(game);
         self.bfs(game);
     }

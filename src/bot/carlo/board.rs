@@ -226,6 +226,9 @@ impl Board {
             return ABIter::A(std::iter::empty());
         };
 
+        let mut walls_left = self.game.walls_left.clone();
+        walls_left[self.game.player.as_index()] -= 1;
+
         ABIter::B(
             self.wall_moves
                 .iter()
@@ -239,7 +242,7 @@ impl Board {
                             let orientation =
                                 [WallOrientation::Horizontal, WallOrientation::Vertical][orient];
 
-                            let (valid, stats) = self.valid_wall(x, y, orientation);
+                            let (valid, dists) = self.valid_wall(x, y, orientation);
                             if !valid {
                                 return None;
                             }
@@ -249,7 +252,10 @@ impl Board {
                                     orientation,
                                     position: WallPosition { x, y },
                                 },
-                                stats,
+                                Some(BoardStats {
+                                    dist: dists.unwrap(),
+                                    walls: walls_left,
+                                }),
                             ))
                         })
                     })
@@ -262,7 +268,7 @@ impl Board {
         x: usize,
         y: usize,
         orientation: WallOrientation,
-    ) -> (bool, Option<BoardStats>) {
+    ) -> (bool, Option<[usize; 2]>) {
         let (w_blockes, w_dist) =
             self.bfs_white
                 .wall_blocks_player_path(&self.game, x, y, orientation);
@@ -277,16 +283,7 @@ impl Board {
             return (false, None);
         }
 
-        let mut walls_left = self.game.walls_left.clone();
-        walls_left[self.game.player.as_index()] -= 1;
-
-        (
-            true,
-            Some(BoardStats {
-                dist: [w_dist, b_dist],
-                walls: walls_left,
-            }),
-        )
+        (true, Some([w_dist, b_dist]))
     }
 
     fn place_wall(&mut self, x: usize, y: usize, orientation: WallOrientation) {
