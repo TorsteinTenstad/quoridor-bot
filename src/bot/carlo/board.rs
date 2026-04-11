@@ -277,7 +277,7 @@ impl Board {
         }
 
         let (b_blockes, b_dist) =
-            self.bfs_white
+            self.bfs_black
                 .wall_blocks_player_path(&self.game, x, y, orientation);
         if b_blockes {
             return (false, None);
