@@ -1,5 +1,5 @@
 use crate::bot::BotType;
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
 
 #[derive(clap_derive::Parser, Debug)]
 pub struct Args {
@@ -35,6 +35,12 @@ pub struct Args {
 
     #[clap(long, default_value_t = 1000)]
     pub window_size: usize,
+
+    #[arg(long)]
+    pub darwin_weights_white: Option<PathBuf>,
+
+    #[arg(long)]
+    pub darwin_weights_black: Option<PathBuf>,
 }
 
 pub const DEFAULT_DURATION: Duration = Duration::from_secs(5);

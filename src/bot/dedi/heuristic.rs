@@ -4,13 +4,16 @@ use crate::{
         walls::{Board, Tile},
     },
     data_model::{Game, Player},
+    generic_heuristic::GenericHeuristicWeights,
 };
 
-#[derive(Default, Debug, Clone, Copy, clap_derive::ValueEnum)]
+#[derive(Default, Debug, Clone, clap_derive::ValueEnum)]
 pub enum Heuristic {
     #[default]
     Simple,
     Tt,
+    #[clap(skip)]
+    Generic(GenericHeuristicWeights),
 }
 
 impl Heuristic {
@@ -24,8 +27,33 @@ impl Heuristic {
         match &self {
             Self::Simple => simple(game, player, board, opponent_board),
             Self::Tt => tt(game, player, board, opponent_board),
+            Self::Generic(weights) => generic(game, player, board, opponent_board, weights),
         }
     }
+}
+
+fn generic(
+    game: &Game,
+    player: Player,
+    board: &Board,
+    opponent_board: &Board,
+    weights: &GenericHeuristicWeights,
+) -> isize {
+    let distance = {
+        let pos = game.board.player_position(player);
+        match board.tiles[pos.y][pos.x] {
+            Tile::Valid(_, distance) => distance,
+            Tile::Invalid => unreachable!(),
+        }
+    };
+    let opponent_distance = {
+        let pos = game.board.player_position(player.opponent());
+        match opponent_board.tiles[pos.y][pos.x] {
+            Tile::Valid(_, distance) => distance,
+            Tile::Invalid => unreachable!(),
+        }
+    };
+    crate::generic_heuristic::generic_heuristic(game, weights, distance, opponent_distance)
 }
 
 fn tt(game: &Game, player: Player, board: &Board, opponent_board: &Board) -> isize {

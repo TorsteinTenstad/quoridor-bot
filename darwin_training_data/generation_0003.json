@@ -1,0 +1,502 @@
+[
+  {
+    "genes": {
+      "distance": -95.830086,
+      "walls_left": -38.429977,
+      "opponent_distance_x_walls_left": -1.2314072,
+      "manhattan_distance_x_wall_progress": 8.258992,
+      "walls_left_x_wall_progress": 94.34654
+    },
+    "win_rate": 0.90625
+  },
+  {
+    "genes": {
+      "distance": -41.14726,
+      "walls_left": 74.242386,
+      "opponent_distance_x_walls_left": 4.092743,
+      "manhattan_distance_x_wall_progress": 52.188538,
+      "walls_left_x_wall_progress": 55.30669
+    },
+    "win_rate": 0.5510204
+  },
+  {
+    "genes": {
+      "distance": -44.928967,
+      "walls_left": 70.664215,
+      "opponent_distance_x_walls_left": 4.092743,
+      "manhattan_distance_x_wall_progress": 52.188538,
+      "walls_left_x_wall_progress": 55.30669
+    },
+    "win_rate": 0.22916667
+  },
+  {
+    "genes": {
+      "distance": -44.928967,
+      "walls_left": 70.664215,
+      "opponent_distance_x_walls_left": 4.092743,
+      "manhattan_distance_x_wall_progress": 52.188538,
+      "walls_left_x_wall_progress": 55.30669
+    },
+    "win_rate": 0.22916667
+  },
+  {
+    "genes": {
+      "distance": -82.45163,
+      "walls_left": -23.794365,
+      "opponent_distance_x_walls_left": -1.2627318,
+      "manhattan_distance_x_wall_progress": 22.050644,
+      "walls_left_x_wall_progress": 73.85272
+    },
+    "win_rate": 0.5102041
+  },
+  {
+    "genes": {
+      "distance": -42.59162,
+      "walls_left": -23.794365,
+      "opponent_distance_x_walls_left": -1.2627318,
+      "manhattan_distance_x_wall_progress": -80.49812,
+      "walls_left_x_wall_progress": 73.85272
+    },
+    "win_rate": 0.40816328
+  },
+  {
+    "genes": {
+      "distance": -39.89692,
+      "walls_left": -23.794365,
+      "opponent_distance_x_walls_left": -1.2627318,
+      "manhattan_distance_x_wall_progress": -74.671555,
+      "walls_left_x_wall_progress": 73.85272
+    },
+    "win_rate": 0.7244898
+  },
+  {
+    "genes": {
+      "distance": -42.59162,
+      "walls_left": 2.6131592,
+      "opponent_distance_x_walls_left": 37.217255,
+      "manhattan_distance_x_wall_progress": -98.098946,
+      "walls_left_x_wall_progress": 30.658646
+    },
+    "win_rate": 0.53061223
+  },
+  {
+    "genes": {
+      "distance": -42.59162,
+      "walls_left": 2.6131592,
+      "opponent_distance_x_walls_left": 37.217255,
+      "manhattan_distance_x_wall_progress": 55.25525,
+      "walls_left_x_wall_progress": 0.9613266
+    },
+    "win_rate": 0.6041667
+  },
+  {
+    "genes": {
+      "distance": -42.59162,
+      "walls_left": 2.6131592,
+      "opponent_distance_x_walls_left": 37.217255,
+      "manhattan_distance_x_wall_progress": 55.25525,
+      "walls_left_x_wall_progress": 0.9613266
+    },
+    "win_rate": 0.6041667
+  },
+  {
+    "genes": {
+      "distance": -35.128258,
+      "walls_left": 55.4946,
+      "opponent_distance_x_walls_left": 5.243683,
+      "manhattan_distance_x_wall_progress": -5.702545,
+      "walls_left_x_wall_progress": 56.941177
+    },
+    "win_rate": 0.63265306
+  },
+  {
+    "genes": {
+      "distance": -35.128258,
+      "walls_left": 56.38539,
+      "opponent_distance_x_walls_left": 47.9718,
+      "manhattan_distance_x_wall_progress": -5.205475,
+      "walls_left_x_wall_progress": 56.941177
+    },
+    "win_rate": 0.5408163
+  },
+  {
+    "genes": {
+      "distance": -35.128258,
+      "walls_left": 55.4946,
+      "opponent_distance_x_walls_left": 47.9718,
+      "manhattan_distance_x_wall_progress": -5.702545,
+      "walls_left_x_wall_progress": 56.941177
+    },
+    "win_rate": 0.5555556
+  },
+  {
+    "genes": {
+      "distance": -42.59162,
+      "walls_left": 55.4946,
+      "opponent_distance_x_walls_left": -1.2314072,
+      "manhattan_distance_x_wall_progress": -98.098946,
+      "walls_left_x_wall_progress": 73.85272
+    },
+    "win_rate": 0.4387755
+  },
+  {
+    "genes": {
+      "distance": -35.128258,
+      "walls_left": 55.4946,
+      "opponent_distance_x_walls_left": 47.9718,
+      "manhattan_distance_x_wall_progress": -5.702545,
+      "walls_left_x_wall_progress": 56.941177
+    },
+    "win_rate": 0.5555556
+  },
+  {
+    "genes": {
+      "distance": -35.87238,
+      "walls_left": 55.4946,
+      "opponent_distance_x_walls_left": 47.9718,
+      "manhattan_distance_x_wall_progress": -5.702545,
+      "walls_left_x_wall_progress": 52.96475
+    },
+    "win_rate": 0.21428572
+  },
+  {
+    "genes": {
+      "distance": -35.128258,
+      "walls_left": -23.794365,
+      "opponent_distance_x_walls_left": 47.9718,
+      "manhattan_distance_x_wall_progress": -74.17331,
+      "walls_left_x_wall_progress": 51.73171
+    },
+    "win_rate": 0.20408164
+  },
+  {
+    "genes": {
+      "distance": -35.128258,
+      "walls_left": 55.4946,
+      "opponent_distance_x_walls_left": 47.9718,
+      "manhattan_distance_x_wall_progress": -5.702545,
+      "walls_left_x_wall_progress": 56.941177
+    },
+    "win_rate": 0.5555556
+  },
+  {
+    "genes": {
+      "distance": -37.769997,
+      "walls_left": 55.4946,
+      "opponent_distance_x_walls_left": 47.9718,
+      "manhattan_distance_x_wall_progress": -5.702545,
+      "walls_left_x_wall_progress": 56.941177
+    },
+    "win_rate": 0.59183675
+  },
+  {
+    "genes": {
+      "distance": -41.14726,
+      "walls_left": -23.794365,
+      "opponent_distance_x_walls_left": 4.092743,
+      "manhattan_distance_x_wall_progress": -74.671555,
+      "walls_left_x_wall_progress": 73.85272
+    },
+    "win_rate": 0.5510204
+  },
+  {
+    "genes": {
+      "distance": -46.184772,
+      "walls_left": -23.794365,
+      "opponent_distance_x_walls_left": -1.2314072,
+      "manhattan_distance_x_wall_progress": -74.671555,
+      "walls_left_x_wall_progress": 73.85272
+    },
+    "win_rate": 0.39583334
+  },
+  {
+    "genes": {
+      "distance": -46.184772,
+      "walls_left": -23.794365,
+      "opponent_distance_x_walls_left": -1.2314072,
+      "manhattan_distance_x_wall_progress": -74.671555,
+      "walls_left_x_wall_progress": 73.85272
+    },
+    "win_rate": 0.39583334
+  },
+  {
+    "genes": {
+      "distance": -95.830086,
+      "walls_left": -23.794365,
+      "opponent_distance_x_walls_left": -1.2314072,
+      "manhattan_distance_x_wall_progress": 8.258992,
+      "walls_left_x_wall_progress": 73.85272
+    },
+    "win_rate": 0.45918366
+  },
+  {
+    "genes": {
+      "distance": -95.830086,
+      "walls_left": -38.429977,
+      "opponent_distance_x_walls_left": -1.2819134,
+      "manhattan_distance_x_wall_progress": 8.258992,
+      "walls_left_x_wall_progress": 94.34654
+    },
+    "win_rate": 0.45918366
+  },
+  {
+    "genes": {
+      "distance": -95.830086,
+      "walls_left": -38.429977,
+      "opponent_distance_x_walls_left": -1.2314072,
+      "manhattan_distance_x_wall_progress": 8.258992,
+      "walls_left_x_wall_progress": 94.34654
+    },
+    "win_rate": 0.90625
+  },
+  {
+    "genes": {
+      "distance": -82.45163,
+      "walls_left": -3.292511,
+      "opponent_distance_x_walls_left": -28.472996,
+      "manhattan_distance_x_wall_progress": 22.050644,
+      "walls_left_x_wall_progress": -26.326965
+    },
+    "win_rate": 0.0
+  },
+  {
+    "genes": {
+      "distance": -69.75941,
+      "walls_left": -3.292511,
+      "opponent_distance_x_walls_left": -1.3057047,
+      "manhattan_distance_x_wall_progress": -25.833298,
+      "walls_left_x_wall_progress": 94.34654
+    },
+    "win_rate": 0.47959185
+  },
+  {
+    "genes": {
+      "distance": -72.13137,
+      "walls_left": -3.292511,
+      "opponent_distance_x_walls_left": -1.3282614,
+      "manhattan_distance_x_wall_progress": -25.833298,
+      "walls_left_x_wall_progress": 92.796326
+    },
+    "win_rate": 0.42857143
+  },
+  {
+    "genes": {
+      "distance": -44.928967,
+      "walls_left": 70.664215,
+      "opponent_distance_x_walls_left": 5.243683,
+      "manhattan_distance_x_wall_progress": 52.188538,
+      "walls_left_x_wall_progress": 51.183346
+    },
+    "win_rate": 0.56122446
+  },
+  {
+    "genes": {
+      "distance": -44.928967,
+      "walls_left": 70.664215,
+      "opponent_distance_x_walls_left": 4.322389,
+      "manhattan_distance_x_wall_progress": 52.188538,
+      "walls_left_x_wall_progress": 55.30669
+    },
+    "win_rate": 0.63265306
+  },
+  {
+    "genes": {
+      "distance": -44.928967,
+      "walls_left": 70.664215,
+      "opponent_distance_x_walls_left": 4.375105,
+      "manhattan_distance_x_wall_progress": 52.188538,
+      "walls_left_x_wall_progress": 55.30669
+    },
+    "win_rate": 0.56122446
+  },
+  {
+    "genes": {
+      "distance": -35.128258,
+      "walls_left": -23.794365,
+      "opponent_distance_x_walls_left": -1.2314072,
+      "manhattan_distance_x_wall_progress": -5.702545,
+      "walls_left_x_wall_progress": 56.941177
+    },
+    "win_rate": 0.46938777
+  },
+  {
+    "genes": {
+      "distance": -35.128258,
+      "walls_left": 55.4946,
+      "opponent_distance_x_walls_left": 47.9718,
+      "manhattan_distance_x_wall_progress": -5.702545,
+      "walls_left_x_wall_progress": 56.941177
+    },
+    "win_rate": 0.5555556
+  },
+  {
+    "genes": {
+      "distance": -35.128258,
+      "walls_left": 55.4946,
+      "opponent_distance_x_walls_left": 47.9718,
+      "manhattan_distance_x_wall_progress": -5.702545,
+      "walls_left_x_wall_progress": 56.941177
+    },
+    "win_rate": 0.5555556
+  },
+  {
+    "genes": {
+      "distance": -37.42841,
+      "walls_left": -38.429977,
+      "opponent_distance_x_walls_left": 4.092743,
+      "manhattan_distance_x_wall_progress": 52.188538,
+      "walls_left_x_wall_progress": 60.587906
+    },
+    "win_rate": 0.5510204
+  },
+  {
+    "genes": {
+      "distance": -95.830086,
+      "walls_left": -38.429977,
+      "opponent_distance_x_walls_left": 81.82743,
+      "manhattan_distance_x_wall_progress": 8.021973,
+      "walls_left_x_wall_progress": 94.34654
+    },
+    "win_rate": 0.6145833
+  },
+  {
+    "genes": {
+      "distance": -95.830086,
+      "walls_left": -38.429977,
+      "opponent_distance_x_walls_left": 81.82743,
+      "manhattan_distance_x_wall_progress": 8.021973,
+      "walls_left_x_wall_progress": 94.34654
+    },
+    "win_rate": 0.6145833
+  },
+  {
+    "genes": {
+      "distance": -44.653774,
+      "walls_left": 70.664215,
+      "opponent_distance_x_walls_left": 4.092743,
+      "manhattan_distance_x_wall_progress": 8.021973,
+      "walls_left_x_wall_progress": 94.34654
+    },
+    "win_rate": 0.64285713
+  },
+  {
+    "genes": {
+      "distance": -44.95837,
+      "walls_left": 70.664215,
+      "opponent_distance_x_walls_left": 4.483753,
+      "manhattan_distance_x_wall_progress": 52.188538,
+      "walls_left_x_wall_progress": 60.587906
+    },
+    "win_rate": 0.5408163
+  },
+  {
+    "genes": {
+      "distance": -44.653774,
+      "walls_left": 70.664215,
+      "opponent_distance_x_walls_left": 4.092743,
+      "manhattan_distance_x_wall_progress": 52.188538,
+      "walls_left_x_wall_progress": 60.587906
+    },
+    "win_rate": 0.46938777
+  },
+  {
+    "genes": {
+      "distance": -35.128258,
+      "walls_left": -26.144243,
+      "opponent_distance_x_walls_left": 47.9718,
+      "manhattan_distance_x_wall_progress": -5.702545,
+      "walls_left_x_wall_progress": 73.85272
+    },
+    "win_rate": 0.5510204
+  },
+  {
+    "genes": {
+      "distance": -35.128258,
+      "walls_left": 55.4946,
+      "opponent_distance_x_walls_left": 47.9718,
+      "manhattan_distance_x_wall_progress": -5.915138,
+      "walls_left_x_wall_progress": 56.941177
+    },
+    "win_rate": 0.53061223
+  },
+  {
+    "genes": {
+      "distance": -35.128258,
+      "walls_left": 55.4946,
+      "opponent_distance_x_walls_left": 47.9718,
+      "manhattan_distance_x_wall_progress": -5.702545,
+      "walls_left_x_wall_progress": 59.697765
+    },
+    "win_rate": 0.5510204
+  },
+  {
+    "genes": {
+      "distance": -29.192566,
+      "walls_left": -85.659676,
+      "opponent_distance_x_walls_left": -1.2314072,
+      "manhattan_distance_x_wall_progress": -67.19301,
+      "walls_left_x_wall_progress": 72.87632
+    },
+    "win_rate": 0.41836736
+  },
+  {
+    "genes": {
+      "distance": -29.192566,
+      "walls_left": -92.975784,
+      "opponent_distance_x_walls_left": -12.631081,
+      "manhattan_distance_x_wall_progress": -67.06964,
+      "walls_left_x_wall_progress": 21.653725
+    },
+    "win_rate": 0.020408163
+  },
+  {
+    "genes": {
+      "distance": -29.192566,
+      "walls_left": -92.975784,
+      "opponent_distance_x_walls_left": -12.631081,
+      "manhattan_distance_x_wall_progress": -67.19301,
+      "walls_left_x_wall_progress": 21.653725
+    },
+    "win_rate": 0.030612245
+  },
+  {
+    "genes": {
+      "distance": -90.44049,
+      "walls_left": -23.794365,
+      "opponent_distance_x_walls_left": 81.82743,
+      "manhattan_distance_x_wall_progress": 8.021973,
+      "walls_left_x_wall_progress": 94.34654
+    },
+    "win_rate": 0.5408163
+  },
+  {
+    "genes": {
+      "distance": -95.830086,
+      "walls_left": -36.518826,
+      "opponent_distance_x_walls_left": 84.479385,
+      "manhattan_distance_x_wall_progress": 8.021973,
+      "walls_left_x_wall_progress": 94.34654
+    },
+    "win_rate": 0.5816327
+  },
+  {
+    "genes": {
+      "distance": -95.830086,
+      "walls_left": -36.518826,
+      "opponent_distance_x_walls_left": 81.82743,
+      "manhattan_distance_x_wall_progress": 8.021973,
+      "walls_left_x_wall_progress": 94.34654
+    },
+    "win_rate": 0.5510204
+  },
+  {
+    "genes": {
+      "distance": -37.91487,
+      "walls_left": 70.664215,
+      "opponent_distance_x_walls_left": 4.092743,
+      "manhattan_distance_x_wall_progress": 53.116657,
+      "walls_left_x_wall_progress": 60.587906
+    },
+    "win_rate": 0.59183675
+  }
+]

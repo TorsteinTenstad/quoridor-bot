@@ -11,6 +11,10 @@ path = "src/lib.rs"
 name = "quoridor-bot-gui"
 path = "src/main_gui.rs"
 
+[[bin]]
+name = "quoridor-bot-darwin-training"
+path = "src/main_darwin_training.rs"
+
 [dependencies]
 arraydeque = "0.5"
 arrayvec = "0.7"
@@ -27,6 +31,7 @@ ntest = "0.9.5"
 priority-queue = "2.7.0"
 ctrlc = "3.5.2"
 rayon = "1.8"
+itertools = "0.14.0"
 
 # needed for flamegraph
 # [profile.release]

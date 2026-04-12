@@ -45,7 +45,7 @@ pub struct Cache {
 
 pub fn minimax_iterative(
     game: &mut Game,
-    heuristic: Heuristic,
+    heuristic: &Heuristic,
     duration: Duration,
     cache: &mut Cache,
 ) -> Option<PlayerMove> {
@@ -56,7 +56,7 @@ pub fn minimax_iterative(
     loop {
         match minimax(game, depth, heuristic, deadline, cache) {
             Some((_move, h)) => {
-                println!("Depth {:?}: found {:?} with h={:?}", depth, _move, h);
+                //println!("Depth {:?}: found {:?} with h={:?}", depth, _move, h);
                 if _move.is_none() {
                     break;
                 }
@@ -79,7 +79,7 @@ pub fn minimax_iterative(
 pub fn minimax(
     game: &mut Game,
     depth: usize,
-    heuristic: Heuristic,
+    heuristic: &Heuristic,
     deadline: Option<Instant>,
     cache: &mut Cache,
 ) -> Option<(Option<PlayerMove>, isize)> {
@@ -94,7 +94,7 @@ pub fn minimax(
 fn _minimax(
     game: &mut Game,
     depth: usize,
-    heuristic: Heuristic,
+    heuristic: &Heuristic,
     alpha: isize,
     beta: isize,
     deadline: Option<Instant>,
@@ -286,6 +286,6 @@ fn hash_to_u64<T: Hash>(value: &T) -> u64 {
     hasher.finish()
 }
 
-fn heuristic_eval(heuristic: Heuristic, game: &Game, b1: &Board, b2: &Board) -> isize {
+fn heuristic_eval(heuristic: &Heuristic, game: &Game, b1: &Board, b2: &Board) -> isize {
     heuristic.eval(game, game.player, b1, b2) - heuristic.eval(game, game.player.opponent(), b2, b1)
 }

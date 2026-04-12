@@ -1,5 +1,6 @@
 pub mod abe;
 pub mod carlo;
+pub mod darwin;
 pub mod dedi;
 pub mod monte;
 pub mod monte_ext;
@@ -28,6 +29,7 @@ pub enum BotType {
     Dedi,
     Monte,
     MonteExt,
+    Darwin,
 }
 
 #[derive(Default)]
@@ -39,6 +41,7 @@ pub struct Bots {
     dedi: dedi::Dedi,
     monte: monte::Monte,
     monte_ext: monte_ext::Monte,
+    darwin: darwin::Darwin,
 }
 
 #[derive(clap_derive::Subcommand, Debug)]
@@ -57,6 +60,8 @@ pub enum BotCommand {
     Monte(monte::MonteCommand),
     #[command(subcommand)]
     MonteExt(monte_ext::MonteCommand),
+    #[command(subcommand)]
+    Darwin(darwin::DarwinCommand),
 }
 
 impl Bots {
@@ -69,6 +74,7 @@ impl Bots {
             BotType::Dedi => self.dedi.get_move(game),
             BotType::Monte => self.monte.get_move(game),
             BotType::MonteExt => self.monte_ext.get_move(game),
+            BotType::Darwin => self.darwin.get_move(game),
         }
     }
 
@@ -81,6 +87,7 @@ impl Bots {
             BotCommand::Dedi(cmd) => self.dedi.execute(session, cmd),
             BotCommand::Monte(cmd) => self.monte.execute(session, cmd),
             BotCommand::MonteExt(cmd) => self.monte_ext.execute(session, cmd),
+            BotCommand::Darwin(cmd) => self.darwin.execute(session, cmd),
         }
     }
 
@@ -90,5 +97,6 @@ impl Bots {
         self.neural_net.init(args);
         self.dedi.init(args);
         self.monte.init(args);
+        self.darwin.init(args);
     }
 }

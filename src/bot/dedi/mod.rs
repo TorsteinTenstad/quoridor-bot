@@ -25,11 +25,11 @@ impl Dedi {
     pub fn init(&mut self, args: &args::Args) {
         self.default_depth = args.depth;
         self.default_seconds = args.seconds;
-        if let Some(h) = args.dedi_heuristic_white {
-            self.default_heuristics[Player::White.as_index()] = h;
+        if let Some(h) = &args.dedi_heuristic_white {
+            self.default_heuristics[Player::White.as_index()] = h.clone();
         }
-        if let Some(h) = args.dedi_heuristic_black {
-            self.default_heuristics[Player::Black.as_index()] = h;
+        if let Some(h) = &args.dedi_heuristic_black {
+            self.default_heuristics[Player::Black.as_index()] = h.clone();
         }
     }
 }
@@ -42,7 +42,7 @@ impl Bot for Dedi {
             .default_seconds
             .map(Duration::from_secs)
             .unwrap_or(DEFAULT_DURATION);
-        let h = self.default_heuristics[game.player.as_index()];
+        let h = &self.default_heuristics[game.player.as_index()];
 
         let mut game = game.clone();
         minimax::minimax_iterative(&mut game, h, duration, &mut self.cache).unwrap()
@@ -52,8 +52,9 @@ impl Bot for Dedi {
         match cmd {
             DediCommand::Move { seconds, heuristic } => {
                 let duration = seconds.map(Duration::from_secs).unwrap_or(DEFAULT_DURATION);
-                let h =
-                    heuristic.unwrap_or(self.default_heuristics[session.game.player.as_index()]);
+                let h = heuristic
+                    .as_ref()
+                    .unwrap_or(&self.default_heuristics[session.game.player.as_index()]);
                 let mut game = session.game.clone();
 
                 let m =
