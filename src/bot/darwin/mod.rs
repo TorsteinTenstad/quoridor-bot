@@ -50,10 +50,10 @@ impl Darwin {
         minimax::minimax_iterative(&mut game, &h, duration, &mut self.cache).unwrap()
     }
 
-    pub fn get_move_fixed_depth(&mut self, game: &Game) -> PlayerMove {
+    pub fn get_move_fixed_depth(&mut self, game: &Game, depth: usize) -> PlayerMove {
         let h = Heuristic::Generic(self.default_weights[game.player.as_index()].clone());
         let mut game = game.clone();
-        minimax::minimax(&mut game, 3, &h, None, &mut self.cache)
+        minimax::minimax(&mut game, depth, &h, None, &mut self.cache)
             .unwrap()
             .0
             .unwrap()

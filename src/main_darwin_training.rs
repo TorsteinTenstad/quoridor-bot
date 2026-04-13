@@ -33,23 +33,29 @@ enum Command {
         input_population: PathBuf,
 
         #[clap(short, long)]
-        ouput: Option<PathBuf>,
+        output: Option<PathBuf>,
+
+        #[clap(short, long)]
+        depth: usize,
     },
     Evolve {
         #[clap()]
         input_population: PathBuf,
 
         #[clap(short, long)]
-        ouput: Option<PathBuf>,
+        output: Option<PathBuf>,
     },
     Run {
         #[clap(short, long)]
         n: usize,
 
         #[clap(short, long)]
+        depth: usize,
+
+        #[clap(short, long)]
         generations: usize,
 
-        #[clap(short, long, default_value="out/")]
+        #[clap(short, long, default_value = "out/")]
         output_dir: PathBuf,
     },
 }
@@ -75,7 +81,8 @@ fn main() {
         }
         Command::Evaluate {
             input_population,
-            ouput: output,
+            output,
+            depth,
         } => {
             let output_path = output.unwrap_or({
                 let input_name = input_population.file_name().unwrap();
@@ -84,13 +91,13 @@ fn main() {
             });
             let input_file = File::open(input_population).unwrap();
             let input_population = serde_json::from_reader::<_, Population>(input_file).unwrap();
-            let evaluated = evaluate_population(input_population);
+            let evaluated = evaluate_population(input_population, depth);
             let output_file = File::create_new(output_path).unwrap();
             serde_json::to_writer_pretty(output_file, &evaluated).unwrap();
         }
         Command::Evolve {
             input_population,
-            ouput: output,
+            output,
         } => {
             let output_path = output.unwrap_or({
                 let input_name = input_population.file_name().unwrap();
@@ -106,6 +113,7 @@ fn main() {
         }
         Command::Run {
             n,
+            depth,
             generations,
             output_dir,
         } => {
@@ -124,7 +132,7 @@ fn main() {
             let mut population = Population(inner);
 
             for generation in 0..generations {
-                let evaluated = evaluate_population(population);
+                let evaluated = evaluate_population(population, depth);
                 let output_path = output_dir.join(format!("generation_{generation:04}.json"));
                 let output_file = File::create(output_path).unwrap();
                 serde_json::to_writer_pretty(output_file, &evaluated).unwrap();

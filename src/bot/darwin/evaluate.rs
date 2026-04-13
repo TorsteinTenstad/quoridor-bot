@@ -1,65 +1,75 @@
 use crate::{
     bot::darwin::{
         Darwin,
-        data_model::{EvaluatedGenes, EvaluatedPopulation, Genes, Population},
+        data_model::{EvaluatedGenes, EvaluatedPopulation, Population},
     },
     data_model::{Game, Player},
     game_logic::{execute_move_unchecked_inplace, player_has_won},
     generic_heuristic::GenericHeuristicWeights,
 };
+use rand::{rng, seq::IteratorRandom};
 use rayon::prelude::*;
 
-pub fn evaluate_population(population: Population) -> EvaluatedPopulation {
+pub fn evaluate_population(population: Population, depth: usize) -> EvaluatedPopulation {
+    let n = population.0.len();
+    let mut rng = rng();
+    let matches_per_gene = 4;
+
+    let matches: Vec<(usize, usize)> = (0..n)
+        .flat_map(|i| {
+            (0..n)
+                .filter(move |&j| j != i)
+                .choose_multiple(&mut rng, matches_per_gene)
+                .into_iter()
+                .map(move |j| (i, j))
+        })
+        .collect();
+
+    let results: Vec<(usize, usize, bool)> = matches
+        .par_iter()
+        .map(|&(i, j)| {
+            let won = simulate_game(&population.0[i], &population.0[j], &Player::White, depth);
+            (i, j, won)
+        })
+        .collect();
+
+    let mut scores = vec![(0usize, 0usize); n];
+    for (i, j, won) in results {
+        scores[i].1 += 1;
+        scores[j].1 += 1;
+        if won {
+            scores[i].0 += 1;
+        } else {
+            scores[j].0 += 1;
+        }
+    }
+
     let inner = population
         .0
-        .iter()
-        .map(|genes| evaluate_gene(genes.clone(), &population))
+        .into_iter()
+        .zip(scores)
+        .map(|(genes, (wins, games))| EvaluatedGenes {
+            genes,
+            win_rate: wins as f32 / games as f32,
+        })
         .collect();
+
     EvaluatedPopulation(inner)
-}
-
-pub fn evaluate_gene(genes: Genes, population: &Population) -> EvaluatedGenes {
-    let (wins, games) = population
-        .0
-        .par_iter()
-        .filter(|opponent| &&genes != opponent)
-        .map(|opponent| simulate_games(&genes, opponent))
-        .reduce(
-            || (0, 0),
-            |(total_wins, total_games), (wins, games)| (total_wins + wins, total_games + games),
-        );
-    let win_rate = wins as f32 / games as f32;
-    EvaluatedGenes { genes, win_rate }
-}
-
-fn simulate_games(
-    genes: &GenericHeuristicWeights,
-    opponent: &GenericHeuristicWeights,
-) -> (usize, usize) {
-    let number_of_games = 1;
-    let wins = (0..number_of_games)
-        .flat_map(|_| [Player::White, Player::Black].iter())
-        .filter(|player| simulate_game(genes, opponent, player))
-        .count();
-    (wins, 2 * number_of_games)
 }
 
 fn simulate_game(
     genes: &GenericHeuristicWeights,
     opponent: &GenericHeuristicWeights,
     player: &Player,
+    depth: usize,
 ) -> bool {
     let mut game = Game::new();
-    let mut bot = Darwin {
-        default_seconds: Some(1),
-        default_weights: Default::default(),
-        cache: Default::default(),
-    };
+    let mut bot = Darwin::default();
     bot.default_weights[player.as_index()] = genes.clone();
     bot.default_weights[player.opponent().as_index()] = opponent.clone();
     let max_moves = 128;
     for _ in 0..max_moves {
-        let m = bot.get_move_fixed_depth(&game);
+        let m = bot.get_move_fixed_depth(&game, depth);
         execute_move_unchecked_inplace(&mut game, &m);
         if let Some(winning_player) = player_has_won(&game.board) {
             if winning_player == *player {
