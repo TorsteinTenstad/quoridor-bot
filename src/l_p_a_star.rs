@@ -61,6 +61,14 @@ struct Estimates {
     g: u16,
     rhs: u16,
 }
+impl Estimates {
+    fn is_consistent(&self) -> bool {
+        self.g == self.rhs
+    }
+    fn is_inconsistent(&self) -> bool {
+        self.g != self.rhs
+    }
+}
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 struct Key(u16, u16);
@@ -88,6 +96,16 @@ pub struct LPAStar {
 }
 
 impl LPAStar {
+    pub fn tightness(&mut self, goal: &PiecePosition, walls: &Walls) -> f32 {
+        let d = self.distance_to_goal(goal, walls);
+        let count = self
+            .board
+            .iter()
+            .flat_map(|row| row.iter())
+            .filter(|e| e.is_consistent() && e.g <= d)
+            .count();
+        count as f32 / d as f32
+    }
     pub fn new(player: Player, goal: &PiecePosition) -> Self {
         let start_estimates = Estimates {
             g: u16::MAX,
@@ -187,8 +205,7 @@ impl LPAStar {
     }
 
     fn is_inconsistent(&self, pos: &PiecePosition) -> bool {
-        let estimates = &self.board[pos.y][pos.x];
-        estimates.g != estimates.rhs
+        self.board[pos.y][pos.x].is_inconsistent()
     }
 
     fn calculate_key(&self, pos: &PiecePosition, goal: &PiecePosition) -> Key {
