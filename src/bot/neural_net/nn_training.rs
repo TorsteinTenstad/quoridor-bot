@@ -4,14 +4,14 @@ use burn::module::{Module, AutodiffModule};
 use burn::nn::{Initializer};
 use burn::nn::conv::Conv2dConfig;
 use burn::optim::{AdamConfig, GradientsParams, Optimizer};
-use rand::{thread_rng, Rng};
+use rand::{RngExt, rng};
 use rand::prelude::*;
 use std::collections::VecDeque;
 use std::path::Path;
 
 use crate::data_model::Game;
-use crate::nn_config::{SelfPlayConfig, FullTrainingConfig, TrainingMetadata};
-use crate::nn_inference::{
+use crate::bot::neural_net::nn_config::{SelfPlayConfig, FullTrainingConfig, TrainingMetadata};
+use crate::bot::neural_net::nn_inference::{
     QuoridorNet, NetworkModel, EncodedState, Mcts, 
     ACTIONS, is_game_over, legal_action_ids, apply_action, ActionId
 };
@@ -51,7 +51,7 @@ pub fn play_one_game(mcts: &mut Mcts, initial_state: Game, sp: &SelfPlayConfig) 
         let pi = mcts.run(&current_state);
 
         // Sample action according to π
-        let mut a = sample_from_pi(&pi, &mut thread_rng());
+        let mut a = sample_from_pi(&pi, &mut rng());
         
         // Verify the selected action is legal
         let legal_moves = legal_action_ids(&current_state);
@@ -98,14 +98,14 @@ fn encode_state(game: &Game) -> EncodedState {
     let opponent = current_player.opponent();
     
     let current_pos = game.board.player_position(current_player);
-    channels[0][current_pos.y()][current_pos.x()] = 1.0;
+    channels[0][current_pos.y][current_pos.x] = 1.0;
     
     let opponent_pos = game.board.player_position(opponent);
-    channels[1][opponent_pos.y()][opponent_pos.x()] = 1.0;
+    channels[1][opponent_pos.y][opponent_pos.x] = 1.0;
 
     for x in 0..WALL_GRID_WIDTH {
         for y in 0..WALL_GRID_HEIGHT {
-            if let Some(o) = game.board.walls[x][y] {
+            if let Some(o) = game.board.walls.0[x][y] {
                 match o {
                     WallOrientation::Horizontal => channels[2][y][x] = 1.0,
                     WallOrientation::Vertical => channels[3][y][x] = 1.0,
@@ -134,8 +134,7 @@ fn sample_from_pi(pi: &[f32; ACTIONS], rng: &mut ThreadRng) -> ActionId {
             .unwrap_or(0);
     }
     
-    use rand::Rng as _;
-    let r_val: f32 = rng.r#gen();
+    let r_val: f32 = rng.random();
     let r = r_val * sum;
     let mut acc = 0.0;
     for (i, p) in pi.iter().enumerate() {
@@ -177,7 +176,7 @@ impl ReplayBuffer {
         let n = self.buf.len();
         let mut out = Vec::with_capacity(bs);
         for _ in 0..bs { 
-            let i = rng.gen_range(0..n);
+            let i = rng.random_range(0..n);
             out.push(self.buf[i].clone()); 
         }
         out
@@ -228,7 +227,7 @@ pub fn train_loop(
     let sp_cfg = config.self_play.clone();
     let tcfg = config.training.clone();
     
-    let mut rng = thread_rng();
+    let mut rng = rng();
     let mut replay = ReplayBuffer::new(tcfg.replay_size);
     
     // Create network on autodiff backend for training

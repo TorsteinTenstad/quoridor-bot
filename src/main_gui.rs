@@ -61,8 +61,8 @@ fn main() {
         let input_type_black = InputType::from(args.player_black);
         let mut bots_white = Bots::default();
         let mut bots_black = Bots::default();
-        bots_white.load_default_params(&args);
-        bots_black.load_default_params(&args);
+        bots_white.load_default_params(&args, &Player::White);
+        bots_black.load_default_params(&args, &Player::Black);
 
         let mut session = Session::default();
         loop {

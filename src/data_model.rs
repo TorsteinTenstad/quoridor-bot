@@ -45,6 +45,9 @@ impl PiecePosition {
     pub fn new(x: usize, y: usize) -> Self {
         Self { x, y }
     }
+    pub fn index(&self) -> usize {
+        self.y * PIECE_GRID_WIDTH + self.x
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

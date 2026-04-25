@@ -6,7 +6,7 @@ pub mod random;
 
 use crate::{
     args::Args,
-    data_model::{Game, PlayerMove},
+    data_model::{Game, Player, PlayerMove},
     session::Session,
 };
 
@@ -70,9 +70,10 @@ impl Bots {
         }
     }
 
-    pub fn load_default_params(&mut self, args: &Args) {
+    pub fn load_default_params(&mut self, args: &Args, player: &Player) 
+    {
         self.abe.load_default_params(args);
-        self.neural_net.load_default_params(args);
+        self.neural_net.load_default_params(args, player);
         self.dedi.load_default_params(args);
     }
 }

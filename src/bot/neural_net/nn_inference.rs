@@ -1,7 +1,7 @@
 use burn::backend::NdArray;
 use rand::prelude::*;
-use rand::{thread_rng, Rng};
-use rand::distributions::WeightedIndex;
+use rand::{rng};
+use rand::distr::weighted::{WeightedIndex};
 use burn;
 use burn::nn::{self, Initializer, Relu};
 use burn::tensor::{backend::Backend, Tensor};
@@ -14,7 +14,7 @@ use std::hash::{Hash, Hasher};
 use crate::data_model::{Game, Player, PlayerMove, WallOrientation, PIECE_GRID_HEIGHT, PIECE_GRID_WIDTH, WALL_GRID_HEIGHT, WALL_GRID_WIDTH};
 use crate::all_moves::ALL_MOVES;
 use crate::game_logic::{is_move_legal, execute_move_unchecked};
-use crate::nn_config::{MctsConfig, FullTrainingConfig};
+use crate::bot::neural_net::nn_config::{MctsConfig, FullTrainingConfig};
 
 pub type ActionId = u16;
 
@@ -37,11 +37,11 @@ pub type PositionKey = u64;
 /// Check if the game is over and return the winner
 pub fn is_game_over(game: &Game) -> Option<Player> {
     // White wins if reaches y=8
-    if game.board.player_position(Player::White).y() == 8 {
+    if game.board.player_position(Player::White).y == 8 {
         return Some(Player::White);
     }
     // Black wins if reaches y=0
-    if game.board.player_position(Player::Black).y() == 0 {
+    if game.board.player_position(Player::Black).y == 0 {
         return Some(Player::Black);
     }
     None
@@ -63,12 +63,12 @@ pub fn terminal_value(game: &Game) -> Option<f32> {
 /// Hash a game state for transposition table
 pub fn game_to_key(game: &Game) -> PositionKey {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    game.board.player_positions[0].index.hash(&mut hasher);
-    game.board.player_positions[1].index.hash(&mut hasher);
+    game.board.player_positions[0].index().hash(&mut hasher);
+    game.board.player_positions[1].index().hash(&mut hasher);
     // Hash walls
     for x in 0..WALL_GRID_WIDTH {
         for y in 0..WALL_GRID_HEIGHT {
-            if let Some(orientation) = game.board.walls[x][y] {
+            if let Some(orientation) = game.board.walls.0[x][y] {
                 x.hash(&mut hasher);
                 y.hash(&mut hasher);
                 (orientation as u8).hash(&mut hasher);
@@ -85,7 +85,7 @@ pub fn game_to_key(game: &Game) -> PositionKey {
 pub fn legal_action_ids(game: &Game) -> Vec<ActionId> {
     ALL_MOVES.iter()
         .enumerate()
-        .filter(|(_, mv)| is_move_legal(game, game.player, mv))
+        .filter(|(_, mv)| is_move_legal(game, mv))
         .map(|(id, _)| id as ActionId)
         .collect()
 }
@@ -94,7 +94,7 @@ pub fn legal_action_ids(game: &Game) -> Vec<ActionId> {
 pub fn apply_action(game: &Game, action_id: ActionId) -> Game {
     let mut new_game = game.clone();
     let player_move = action_from_id(action_id);
-    execute_move_unchecked(&mut new_game, game.player, &player_move);
+    execute_move_unchecked(&mut new_game, &player_move);
     new_game
 }
 
@@ -105,13 +105,13 @@ fn action_from_id(action_id: ActionId) -> PlayerMove {
 /// Get a move from the network using temperature-based sampling
 pub fn get_move(game: &Game, network: &QuoridorNet, player: Player, temperature: f32) -> PlayerMove
 {
-    let mut rng = thread_rng();
+    let mut rng = rng();
 
     let encoded = vec![encode(game)];
     let prediction = predict_batch(network, &encoded);
 
     let legal_moves: Vec<(usize, &f32)> = prediction.first().unwrap().policy_logits.iter().enumerate()
-        .filter(|(id, _)|{is_move_legal(game, player, &action_from_id(*id as u16))}).collect();
+        .filter(|(id, _)|{is_move_legal(game, &action_from_id(*id as u16))}).collect();
 
     // Handle edge case of no legal moves (shouldn't happen in valid game)
     if legal_moves.is_empty() {
@@ -159,15 +159,15 @@ fn encode(game: &Game) -> EncodedState {
     let opponent = current_player.opponent();
     
     let current_pos = game.board.player_position(current_player);
-    channels[0][current_pos.y()][current_pos.x()] = 1.0;
+    channels[0][current_pos.y][current_pos.x] = 1.0;
     
     let opponent_pos = game.board.player_position(opponent);
-    channels[1][opponent_pos.y()][opponent_pos.x()] = 1.0;
+    channels[1][opponent_pos.y][opponent_pos.x] = 1.0;
 
     // walls (just fill in as 1.0 where a wall is placed)
     for x in 0..WALL_GRID_WIDTH {
         for y in 0..WALL_GRID_HEIGHT {
-            if let Some(o) = game.board.walls[x][y] {
+            if let Some(o) = game.board.walls.0[x][y] {
                 match o {
                     WallOrientation::Horizontal =>
                         channels[2][y][x] = 1.0,
@@ -229,7 +229,7 @@ pub struct Mcts {
 
 impl Mcts {
     pub fn new(cfg: MctsConfig, net: QuoridorNet) -> Self {
-        Self { cfg, net, nodes: HashMap::new(), rng: thread_rng() }
+        Self { cfg, net, nodes: HashMap::new(), rng: rng() }
     }
 
     fn get_or_expand(&mut self, state: &Game) -> (PositionKey, bool) {

@@ -1,7 +1,7 @@
 use core::time;
 use std::thread::sleep;
 
-use rand::{Rng, rngs::ThreadRng, seq::IteratorRandom};
+use rand::{Rng, RngExt, rngs::ThreadRng, seq::IteratorRandom};
 
 use crate::{
     all_moves::ALL_MOVES,
