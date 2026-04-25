@@ -152,13 +152,18 @@ pub fn get_move(game: &Game, network: &QuoridorNet, player: Player, temperature:
 
 fn encode(game: &Game) -> EncodedState {
     // shape: [channels, 9, 9]
-    let mut channels = vec![vec![vec![0.0; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT]; 8];
+    let mut channels = vec![vec![vec![0.0; PIECE_GRID_WIDTH]; PIECE_GRID_HEIGHT]; 6];
 
-    // player pawns
-    for p in [Player::White, Player::Black] {
-        let pos = game.board.player_position(p);
-        channels[p.as_index()][pos.y()][pos.x()] = 1.0;
-    }
+    // player pawns - ALWAYS encode current player in channel 0, opponent in channel 1
+    // This ensures the network always learns from the current player's perspective
+    let current_player = game.player;
+    let opponent = current_player.opponent();
+    
+    let current_pos = game.board.player_position(current_player);
+    channels[0][current_pos.y()][current_pos.x()] = 1.0;
+    
+    let opponent_pos = game.board.player_position(opponent);
+    channels[1][opponent_pos.y()][opponent_pos.x()] = 1.0;
 
     // walls (just fill in as 1.0 where a wall is placed)
     for x in 0..WALL_GRID_WIDTH {
@@ -172,26 +177,15 @@ fn encode(game: &Game) -> EncodedState {
         }
     }
 
-    // walls left (normalized by 10)
+    // walls left (normalized by 10) - current player's walls in channel 4, opponent's in channel 5
     for x in 0..PIECE_GRID_WIDTH {
         for y in 0..PIECE_GRID_HEIGHT {
-            channels[4][y][x] = game.walls_left[0] as f32 / 10.0;
-            channels[5][y][x] = game.walls_left[1] as f32 / 10.0;
+            channels[4][y][x] = game.walls_left[current_player.as_index()] as f32 / 10.0;
+            channels[5][y][x] = game.walls_left[opponent.as_index()] as f32 / 10.0;
         }
     }
 
-    // player-to-move plane
-    let current = game.player.as_index();
-    for x in 0..PIECE_GRID_WIDTH {
-        for y in 0..PIECE_GRID_HEIGHT {
-            channels[6][y][x] = if current == 0 { 1.0 } else { 0.0 };
-        }
-    }
-
-    EncodedState {
-        planes: channels,
-        c: 8,
-    }
+    EncodedState { planes: channels, c: 6 }
 }
 
 // ===== 1) Policy-Value Network interface =====
@@ -749,7 +743,7 @@ impl ReplayBuffer {
 
 /// Helper function to create a new NetworkModel on any backend
 fn create_network_model<B: Backend>(device: &B::Device) -> NetworkModel<B> {
-    let conv_cfg = Conv2dConfig::new([8, 64], [3, 3])
+    let conv_cfg = Conv2dConfig::new([6, 64], [3, 3])
         .with_initializer(Initializer::KaimingUniform { gain: 1.0, fan_out_only: false });
     let conv1 = conv_cfg.init(device);
 
@@ -925,7 +919,7 @@ fn train_step<B: burn::tensor::backend::AutodiffBackend>(
     
     // Encode batch inputs - create tensors directly on the correct backend
     let batch_size = batch.len();
-    let c = 8; // channels
+    let c = 6; // channels
     
     // Flatten all inputs into single Vec
     let mut flat: Vec<f32> = Vec::with_capacity(batch_size * c * 9 * 9);
@@ -1181,8 +1175,8 @@ impl QuoridorNet {
     pub fn new() -> Self {
         let device = <NdArray as burn::prelude::Backend>::Device::default();
 
-        let conv_cfg = Conv2dConfig::new([8, 64], [3, 3])
-            .with_initializer(Initializer::KaimingUniform { gain: 1.0, fan_out_only: false }); // in_channels=8, out=64
+        let conv_cfg = Conv2dConfig::new([6, 64], [3, 3])
+            .with_initializer(Initializer::KaimingUniform { gain: 1.0, fan_out_only: false }); // in_channels=6, out=64
 
         let conv1 = conv_cfg.init(&device);
 
@@ -1225,7 +1219,7 @@ impl QuoridorNet {
     pub fn new_zero_weights() -> Self {
         let device = <NdArray as burn::prelude::Backend>::Device::default();
 
-        let conv_cfg = Conv2dConfig::new([8, 64], [3, 3])
+        let conv_cfg = Conv2dConfig::new([6, 64], [3, 3])
             .with_bias(true)
             .with_initializer(Initializer::Constant { value: 0.0 });
         let conv1 = conv_cfg.init(&device);
@@ -1265,7 +1259,7 @@ impl QuoridorNet {
         let device = <NdArray as burn::prelude::Backend>::Device::default();
 
         // Create conv layers with zero weights
-        let conv_cfg = Conv2dConfig::new([8, 64], [3, 3])
+        let conv_cfg = Conv2dConfig::new([6, 64], [3, 3])
             .with_bias(true)
             .with_initializer(Initializer::Constant { value: 0.0 });
         let conv1 = conv_cfg.init(&device);
