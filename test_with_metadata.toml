@@ -1,0 +1,27 @@
+[mcts]
+c_puct = 1.5
+dirichlet_alpha = 0.30000001192092896
+dirichlet_eps = 0.25
+simulations = 10
+root_noise = true
+temperature = 1.0
+
+[self_play]
+sims_per_move = 10
+temperature_moves = 10
+
+[training]
+batch_size = 128
+steps_per_iter = 100
+games_per_iter = 1
+replay_size = 10000
+iterations = 1
+learning_rate = 0.001
+
+[metadata]
+created_at = "2026-04-03T06:30:00.637041029+00:00"
+completed_at = "2026-04-03T06:30:29.832536591+00:00"
+iterations_completed = 1
+total_games_played = 1
+final_policy_loss = 5.778692722320557
+final_value_loss = 0.9900413751602173

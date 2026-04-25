@@ -1,0 +1,19 @@
+[mcts]
+c_puct = 1.5
+dirichlet_alpha = 0.30000001192092896
+dirichlet_eps = 0.25
+simulations = 400
+root_noise = true
+temperature = 1.0
+
+[self_play]
+sims_per_move = 400
+temperature_moves = 10
+
+[training]
+batch_size = 128
+steps_per_iter = 100
+games_per_iter = 10
+replay_size = 10000
+iterations = 100
+learning_rate = 0.001

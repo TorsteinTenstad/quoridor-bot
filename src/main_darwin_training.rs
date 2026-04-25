@@ -8,7 +8,7 @@ use lib::{
     },
     generic_heuristic::GenericHeuristicWeights,
 };
-use rand::{Rng, rng};
+use rand::{Rng, RngExt, rng};
 
 #[derive(clap_derive::Parser, Debug)]
 pub struct Args {

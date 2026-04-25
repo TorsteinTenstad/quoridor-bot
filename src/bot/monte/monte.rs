@@ -4,7 +4,7 @@ use crate::{
     game_logic::execute_move_unchecked_inplace,
 };
 use arrayvec::ArrayVec;
-use rand::{Rng, rngs::ThreadRng, seq::SliceRandom};
+use rand::{Rng, RngExt, rngs::ThreadRng, seq::SliceRandom};
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::time::{Duration, Instant};

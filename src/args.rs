@@ -1,5 +1,6 @@
+use std::{path::PathBuf, string, time::Duration};
+
 use crate::bot::BotType;
-use std::{path::PathBuf, time::Duration};
 
 #[derive(clap_derive::Parser, Debug)]
 pub struct Args {
@@ -9,7 +10,7 @@ pub struct Args {
     #[arg(short, long, group = "time_control")]
     pub seconds: Option<u64>,
 
-    #[arg(short = 't', long, default_value_t = 0)]
+    #[arg(long, default_value_t = 0)]
     pub abe_background_threads: usize,
 
     #[arg(long)]
@@ -26,6 +27,12 @@ pub struct Args {
 
     #[clap(short, long, default_value_t = 0.0)]
     pub temperature: f32,
+
+    #[clap(long)]
+    pub w_nn_path: Option<PathBuf>,
+
+    #[clap(long)]
+    pub b_nn_path: Option<PathBuf>,
 
     #[clap(short = 'w', long)]
     pub player_white: Option<BotType>,

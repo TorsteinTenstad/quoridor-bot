@@ -1,5 +1,5 @@
 use crate::bot::darwin::data_model::{EvaluatedGenes, EvaluatedPopulation, Genes, Population};
-use rand::Rng;
+use rand::{Rng, RngExt};
 
 pub fn evolve(population: EvaluatedPopulation) -> Population {
     let target_size = population.0.len();

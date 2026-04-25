@@ -6,7 +6,7 @@ use crate::{
     data_model::PlayerMove,
     game_logic::execute_move_unchecked,
 };
-use rand::Rng;
+use rand::{Rng, RngExt};
 use std::collections::HashMap;
 
 #[derive(Debug, Default, Clone)]

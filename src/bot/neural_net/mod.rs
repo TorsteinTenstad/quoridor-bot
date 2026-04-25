@@ -1,23 +1,37 @@
-use crate::{
-    args::Args,
-    data_model::{Game, PlayerMove},
-    session::Session,
-};
+use std::path::PathBuf;
 
-pub struct NeuralNet {
-    default_temperature: f32,
-}
+use crate::{args::Args, bot::neural_net::nn_bot::{QuoridorNet, get_move}, data_model::{Game, Player, PlayerMove}, session::Session};
+
+mod nn_bot;
+mod nn_config;
+mod nn_inference;
+mod nn_training;
+
 
 impl NeuralNet {
-    pub fn init(&mut self, args: &Args) {
-        self.default_temperature = args.temperature;
+    pub fn init(&mut self, args: &Args, player: &Player) {
+        self.temperature = args.temperature;
+        let path = match player {
+            Player::Black => args.b_nn_path.as_ref(),
+            Player::White => args.w_nn_path.as_ref()
+        };
+        if let Some(path) = path
+        {
+           self.net = QuoridorNet::load(path).unwrap();
+        }
     }
+}
+
+pub struct NeuralNet {
+    net: nn_bot::QuoridorNet,
+    temperature: f32,
 }
 
 impl Default for NeuralNet {
     fn default() -> Self {
         Self {
-            default_temperature: 0.5,
+            net: nn_bot::QuoridorNet::new(),
+            temperature: 0.5,
         }
     }
 }
@@ -33,9 +47,16 @@ pub enum NeuralNetCommand {
 impl super::Bot for NeuralNet {
     type Command = NeuralNetCommand;
 
-    fn get_move(&mut self, _game: &Game) -> PlayerMove {
-        unreachable!()
+    fn get_move(&mut self, game: &Game) -> PlayerMove {
+        get_move(game, &self.net, self.temperature)
     }
 
-    fn execute(&mut self, _session: &mut Session, _cmd: Self::Command) {}
+    fn execute(&mut self, session: &mut Session, cmd: Self::Command) {
+        match cmd {
+            Self::Command::Move { temperature } => {
+                session.make_move(get_move(&session.game, &self.net, temperature))
+            }
+        }
+    }
 }
+           

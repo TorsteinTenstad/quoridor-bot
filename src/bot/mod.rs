@@ -9,7 +9,7 @@ pub mod random;
 
 use crate::{
     args::Args,
-    data_model::{Game, PlayerMove},
+    data_model::{Game, Player, PlayerMove},
     session::Session,
 };
 
@@ -91,10 +91,10 @@ impl Bots {
         }
     }
 
-    pub fn init(&mut self, args: &Args) {
+    pub fn init(&mut self, args: &Args, player: &Player) {
         self.abe.init(args);
         self.carlo.init(args);
-        self.neural_net.init(args);
+        self.neural_net.init(args, player);
         self.dedi.init(args);
         self.monte.init(args);
         self.darwin.init(args);
